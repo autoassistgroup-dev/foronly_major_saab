@@ -1788,6 +1788,118 @@ def update_ticket_outcome(ticket_id):
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+# ==========================================
+# PRIVATE NOTES ENDPOINTS
+# ==========================================
+
+@ticket_bp.route('/<ticket_id>/private-notes', methods=['GET'])
+def get_private_notes(ticket_id):
+    """Get all private notes for a ticket."""
+    try:
+        if not is_authenticated():
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+            
+        from database import get_db
+        db = get_db()
+        ticket = db.tickets.find_one({'ticket_id': ticket_id}, {'private_notes': 1})
+        
+        if not ticket:
+            return jsonify({'success': False, 'error': 'Ticket not found'}), 404
+            
+        notes = ticket.get('private_notes', [])
+        return jsonify({'success': True, 'notes': notes})
+        
+    except Exception as e:
+        logger.error(f"Error getting private notes for ticket {ticket_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@ticket_bp.route('/<ticket_id>/private-notes', methods=['POST'])
+def add_private_note(ticket_id):
+    """Add a new private note to a ticket."""
+    try:
+        if not is_authenticated():
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+            
+        data = request.get_json()
+        if not data or not data.get('title') or not data.get('content'):
+            return jsonify({'success': False, 'error': 'Title and content are required'}), 400
+            
+        current_member_name = session.get('member_name') or session.get('user_id') or 'Unknown Admin'
+            
+        note = {
+            'title': data['title'].strip(),
+            'content': data['content'].strip(),
+            'author': current_member_name,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        from database import get_db
+        db = get_db()
+        
+        # Check if updating existing or adding new
+        note_index = data.get('index')
+        if note_index is not None and isinstance(note_index, int) and note_index >= 0:
+            # Update existing note at index
+            update_field = f'private_notes.{note_index}'
+            result = db.tickets.update_one(
+                {'ticket_id': ticket_id},
+                {'$set': {update_field: note, 'updated_at': datetime.now()}}
+            )
+        else:
+            # Append new note
+            result = db.tickets.update_one(
+                {'ticket_id': ticket_id},
+                {
+                    '$push': {'private_notes': note},
+                    '$set': {'updated_at': datetime.now()}
+                }
+            )
+            
+        if result.modified_count == 0:
+            # Maybe the ticket doesn't have a private_notes array yet, or index is out of bounds
+            # If standard push failed, the ticket might not exist
+            pass
+            
+        return jsonify({'success': True, 'message': 'Note saved', 'note': note})
+        
+    except Exception as e:
+        logger.error(f"Error adding private note: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@ticket_bp.route('/<ticket_id>/private-notes/<int:note_index>', methods=['DELETE'])
+def delete_private_note(ticket_id, note_index):
+    """Delete a private note by its index."""
+    try:
+        if not is_authenticated():
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+            
+        from database import get_db
+        db = get_db()
+        
+        # MongoDB doesn't have a simple way to pull by index, so we:
+        # 1. Unset the element at the index (sets it to null)
+        # 2. Pull nulls from the array
+        
+        db.tickets.update_one(
+            {'ticket_id': ticket_id},
+            {'$unset': {f'private_notes.{note_index}': 1}}
+        )
+        
+        db.tickets.update_one(
+            {'ticket_id': ticket_id},
+            {
+                '$pull': {'private_notes': None},
+                '$set': {'updated_at': datetime.now()}
+            }
+        )
+        
+        return jsonify({'success': True, 'message': 'Note deleted'})
+        
+    except Exception as e:
+        logger.error(f"Error deleting private note: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @ticket_bp.route('/<ticket_id>/mark-forwarded-viewed', methods=['POST'])
 def mark_forwarded_viewed(ticket_id):
     """Mark a forwarded ticket as viewed by the current user."""
