@@ -1480,7 +1480,23 @@ def refer_to_tech_director(ticket_id):
             'referral_note': referral_note   # Also keep as referral_note for clarity
         }
         
-        db.update_ticket(ticket_id, update_data)
+        # Add to Private Notes for full history
+        private_note = None
+        if referral_note:
+            private_note = {
+                'title': 'Forwarded to Tech Director',
+                'content': referral_note,
+                'author': session.get('member_name') or 'Admin',
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        if private_note:
+            db.tickets.update_one(
+                {'ticket_id': ticket_id},
+                {'$set': update_data, '$push': {'private_notes': private_note}}
+            )
+        else:
+            db.update_ticket(ticket_id, update_data)
         
         logger.info(f"Ticket {ticket_id} referred to Tech Director (ID: {tech_director_id}) by {session.get('member_name')}")
         
@@ -1552,10 +1568,26 @@ def refer_back_to_admin(ticket_id):
             'referred_back_by_name': current_member_name,
             'referred_back_at': datetime.now(),
             'referred_back_note': referral_note,
-            'forwarding_note': referral_note if referral_note else None,
+            # 'forwarding_note': referral_note if referral_note else None, # Do NOT set forwarding_note here, it breaks dashboard
         }
         
-        db.update_ticket(ticket_id, update_data)
+        # Keep a permanent record in Private Notes
+        private_note = None
+        if referral_note:
+            private_note = {
+                'title': 'Returned to Admin',
+                'content': referral_note,
+                'author': current_member_name,
+                'timestamp': datetime.now().isoformat()
+            }
+
+        if private_note:
+            db.tickets.update_one(
+                {'ticket_id': ticket_id},
+                {'$set': update_data, '$push': {'private_notes': private_note}}
+            )
+        else:
+            db.update_ticket(ticket_id, update_data)
         
         logger.info(f"Ticket {ticket_id} referred back to Admin by {current_member_name}")
         
