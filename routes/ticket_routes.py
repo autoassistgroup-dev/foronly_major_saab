@@ -733,29 +733,18 @@ def send_ticket_reply(ticket_id):
                 if ticket_vhc_link:
                     message_plain = re.sub(r'(@VHC_Link|\[VHC_LINK\])', f'Vehicle Health Check: {ticket_vhc_link}', message_plain, flags=re.IGNORECASE)
                 
-                # Build HTML version with proper line breaks
-                html_body_content = message.replace('\n', '<br>\n')
+                # Build HTML version (reference only - n8n sends plain text)
+                html_message = message.replace('\n', '<br>\n')
                 if ticket_vhc_link:
                     html_link = f'<a href="{ticket_vhc_link}" target="_blank" style="color: #4f46e5; font-weight: 500; text-decoration: underline;">Vehicle Health Check — click here</a>'
-                    html_body_content = re.sub(r'(@VHC_Link|\[VHC_LINK\])', html_link, html_body_content, flags=re.IGNORECASE)
-                
-                # Wrap in a clean HTML email template to prevent Gmail trimming
-                html_message = f'''<html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#222;">
-<div style="max-width:600px;margin:0 auto;padding:20px;">
-{html_body_content}
-</div>
-</body>
-</html>'''
+                    html_message = re.sub(r'(@VHC_Link|\[VHC_LINK\])', html_link, html_message, flags=re.IGNORECASE)
                 
                 webhook_payload = {
                     'ticket_id': ticket_id,
                     'portal_reply_id': str(reply_id),
-                    'response_text': html_message,               # HTML email
-                    'replyMessage': html_message,                 # HTML email
-                    'html_message': html_message,                 # HTML email
-                    'contentType': 'html',                        # Signal n8n to send as HTML
+                    'response_text': message_plain,
+                    'replyMessage': message_plain,
+                    'html_message': html_message,
                     
                     'customer_email': ticket.get('email'),
                     'email': ticket.get('email'),
@@ -1070,29 +1059,18 @@ def send_ticket_email(ticket_id):
                 body_plain = _re.sub(r'<a\s+[^>]*href=["\']([^"\']*)["\'][^>]*>(.*?)</a>', r'\2 \1', body_plain, flags=_re.IGNORECASE)
                 body_plain = _re.sub(r'<[^>]+>', '', body_plain)
                 
-                # Build HTML version with proper email template
-                html_body_content = body.replace('\n', '<br>\n')
+                # Build HTML version (reference only - n8n sends plain text)
+                html_body = body.replace('\n', '<br>\n')
                 if ticket_vhc_link:
                     html_link = f'<a href="{ticket_vhc_link}" target="_blank" style="color: #4f46e5; font-weight: 500; text-decoration: underline;">Vehicle Health Check — click here</a>'
-                    html_body_content = _re.sub(r'(@VHC_Link|\[VHC_LINK\])', html_link, html_body_content, flags=_re.IGNORECASE)
-                
-                # Wrap in clean HTML email template
-                html_body = f'''<html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#222;">
-<div style="max-width:600px;margin:0 auto;padding:20px;">
-{html_body_content}
-</div>
-</body>
-</html>'''
+                    html_body = _re.sub(r'(@VHC_Link|\[VHC_LINK\])', html_link, html_body, flags=_re.IGNORECASE)
                 
                 # Payload with OVERRIDDEN subject and body
                 webhook_payload = {
                     'ticket_id': ticket_id,
-                    'response_text': html_body,
-                    'replyMessage': html_body,
+                    'response_text': body_plain,
+                    'replyMessage': body_plain,
                     'html_message': html_body,
-                    'contentType': 'html',
                     'customer_email': ticket.get('email'),
                     'email': ticket.get('email'),
                     'ticket_subject': subject,
