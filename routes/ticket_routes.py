@@ -688,6 +688,7 @@ def send_ticket_reply(ticket_id):
                 for att in attachments:
                     filename = att.get('filename', att.get('fileName', att.get('name', 'file')))
                     file_data = att.get('data', att.get('fileData', ''))
+                    mime_type = att.get('content_type', 'application/octet-stream')
                     
                     # If no inline data, try reading from disk via file_path
                     if not file_data or len(str(file_data)) < 10:
@@ -696,15 +697,19 @@ def send_ticket_reply(ticket_id):
                             try:
                                 with open(fp, 'rb') as f:
                                     fbytes = f.read()
-                                file_data = b64.b64encode(fbytes).decode('utf-8')
+                                b64_str = b64.b64encode(fbytes).decode('utf-8')
+                                file_data = f"data:{mime_type};base64,{b64_str}"
                                 logger.info(f"Reply attachment resolved from disk: {filename} ({len(fbytes)} bytes)")
                             except Exception as re:
                                 logger.error(f"Failed to read reply attachment {fp}: {re}")
+                    elif file_data and not str(file_data).startswith('data:'):
+                        # Ensure existing base64 strings have the data URI prefix for n8n
+                        file_data = f"data:{mime_type};base64,{file_data}"
                     
                     resolved_reply_attachments.append({
                         'filename': filename,
                         'data': file_data,
-                        'content_type': att.get('content_type', 'application/octet-stream'),
+                        'content_type': mime_type,
                         'size': att.get('size', 0)
                     })
                 
@@ -734,8 +739,8 @@ def send_ticket_reply(ticket_id):
                 webhook_payload = {
                     'ticket_id': ticket_id,
                     'portal_reply_id': str(reply_id),
-                    'response_text': html_message,              # Send HTML so newlines work in email client
-                    'replyMessage': html_message,               # Send HTML so newlines work in email client
+                    'response_text': message_plain,              # Convert back to PLAIN TEXT for n8n
+                    'replyMessage': message_plain,               # Convert back to PLAIN TEXT for n8n
                     'html_message': html_message,               # HTML version for reference
                     
                     'customer_email': ticket.get('email'),
@@ -756,8 +761,8 @@ def send_ticket_reply(ticket_id):
                     'attachment_count': len(resolved_reply_attachments),
                     'body': ticket.get('body', ''),  # Original ticket body for context
                     'draft': message,
-                    'message': html_message,
-                    'content': html_message
+                    'message': message_plain,
+                    'content': message_plain
                 }
                 
                 logger.info(f"Sending reply to N8N webhook for ticket {ticket_id}")
@@ -1011,12 +1016,18 @@ def send_ticket_email(ticket_id):
                                         logger.error(f"[EMAIL-ATT] ❌ Filename match disk read failed: {e}")
                     
                     data_len = len(str(file_data)) if file_data else 0
+                    mime_type = att.get('content_type', 'application/octet-stream')
+                    
                     if data_len < 10:
                         logger.warning(f"[EMAIL-ATT] ⚠️ UNRESOLVED attachment: {filename} (data_len={data_len})")
+                    elif file_data and not str(file_data).startswith('data:'):
+                        # Ensure existing base64 strings have the data URI prefix for n8n
+                        file_data = f"data:{mime_type};base64,{file_data}"
                     
                     resolved_attachments.append({
                         'filename': filename,
-                        'data': file_data
+                        'data': file_data,
+                        'content_type': mime_type
                     })
                     logger.info(f"[EMAIL-ATT] Final: {filename}, data_length={data_len}")
                 
