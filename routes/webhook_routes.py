@@ -405,16 +405,66 @@ def webhook_reply():
             if isinstance(att, dict):
                 # Ensure filename exists (N8N uses fileName, we use filename)
                 if not att.get('filename'):
-                    att['filename'] = att.get('fileName', 'attachment')
+                    att['filename'] = att.get('fileName', att.get('name', 'attachment'))
+                # Ensure name field is also set (template uses both)
+                if not att.get('name'):
+                    att['name'] = att.get('filename', 'attachment')
+                
+                # 🚀 CRITICAL: Tag as webhook source so frontend template shows it
+                # Template filters by source=='webhook' or type=='file'
+                att['source'] = 'webhook'
+                
+                # Normalize type — n8n may send content_type as 'type' (e.g. 'image/jpeg')
+                # but frontend expects type='file' for downloadable attachments
+                original_type = att.get('type', '')
+                if original_type and '/' in original_type:
+                    # This is a mime type, not an attachment type — move it to content_type
+                    att['content_type'] = original_type
+                    att['type'] = 'file'
+                elif not original_type:
+                    att['type'] = 'file'
+                
+                # 🚀 Save base64 data to disk so preview/download works
+                file_data = att.get('data', att.get('fileData', att.get('content', '')))
+                if file_data and isinstance(file_data, str) and len(file_data) > 10:
+                    try:
+                        import os
+                        from config.settings import Config
+                        upload_root = Config.get_upload_folder()
+                        att_dir = os.path.join(upload_root, 'webhook_attachments', ticket_id)
+                        os.makedirs(att_dir, exist_ok=True)
+                        
+                        # Strip data URI prefix if present
+                        raw_b64 = file_data
+                        if raw_b64.startswith('data:'):
+                            comma_idx = raw_b64.find(',')
+                            if comma_idx > -1:
+                                raw_b64 = raw_b64[comma_idx + 1:]
+                        
+                        file_bytes = base64.b64decode(raw_b64)
+                        safe_name = att['filename'].replace('/', '_').replace('\\', '_')
+                        file_path = os.path.join(att_dir, safe_name)
+                        with open(file_path, 'wb') as f:
+                            f.write(file_bytes)
+                        att['file_path'] = file_path
+                        att['size'] = len(file_bytes)
+                        att['has_data'] = True
+                        logger.info(f"📎 ATTACHMENT SAVED │ {att['filename']} → {file_path} ({len(file_bytes)} bytes)")
+                    except Exception as save_err:
+                        logger.warning(f"⚠️ ATTACHMENT │ Failed to save to disk: {save_err}")
+                        att['has_data'] = bool(file_data)
+                
                 normalized_attachments.append(att)
             elif isinstance(att, str):
                 try:
                     encoded = base64.b64encode(att.encode('utf-8')).decode('utf-8')
                     normalized_attachments.append({
                         'filename': 'attachment.txt',
+                        'name': 'attachment.txt',
                         'content_type': 'text/plain',
                         'data': encoded,
-                        'type': 'file'
+                        'type': 'file',
+                        'source': 'webhook'
                     })
                 except Exception as e:
                     logger.warning(f"⚠️  ATTACHMENT │ Failed to normalize string attachment: {e}")
