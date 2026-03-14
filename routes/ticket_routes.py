@@ -690,12 +690,7 @@ def send_ticket_reply(ticket_id):
                     file_data = att.get('data', att.get('fileData', ''))
                     mime_type = att.get('content_type', 'application/octet-stream')
                     
-                    # Strip data URI prefix if present (n8n expects raw base64)
-                    if file_data and isinstance(file_data, str) and file_data.startswith('data:'):
-                        # Remove "data:mime/type;base64," prefix
-                        comma_idx = file_data.find(',')
-                        if comma_idx > -1:
-                            file_data = file_data[comma_idx + 1:]
+
                     
                     # If no inline data, try reading from disk via file_path
                     if not file_data or len(str(file_data)) < 10:
@@ -708,6 +703,10 @@ def send_ticket_reply(ticket_id):
                                 logger.info(f"Reply attachment resolved from disk: {filename} ({len(fbytes)} bytes)")
                             except Exception as re:
                                 logger.error(f"Failed to read reply attachment {fp}: {re}")
+                    
+                    # Ensure base64 strings have the data URI prefix for n8n email node
+                    if file_data and isinstance(file_data, str) and not file_data.startswith('data:'):
+                        file_data = f"data:{mime_type};base64,{file_data}"
                     
                     resolved_reply_attachments.append({
                         'filename': filename,
@@ -1067,11 +1066,9 @@ def send_ticket_email(ticket_id):
                     if data_len < 10:
                         logger.warning(f"[EMAIL-ATT] ⚠️ UNRESOLVED attachment: {filename} (data_len={data_len})")
                     
-                    # Strip data URI prefix if present (n8n expects raw base64)
-                    if file_data and isinstance(file_data, str) and file_data.startswith('data:'):
-                        comma_idx = file_data.find(',')
-                        if comma_idx > -1:
-                            file_data = file_data[comma_idx + 1:]
+                    # Ensure existing base64 strings have the data URI prefix for n8n email node
+                    if file_data and isinstance(file_data, str) and not file_data.startswith('data:'):
+                        file_data = f"data:{mime_type};base64,{file_data}"
                     
                     resolved_attachments.append({
                         'filename': filename,
