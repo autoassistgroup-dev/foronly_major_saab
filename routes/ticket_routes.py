@@ -779,6 +779,39 @@ def send_ticket_reply(ticket_id):
                 email_sent = webhook_response.status_code == 200
                 logger.info(f"N8N webhook response for ticket {ticket_id}: {webhook_response.status_code}")
                 
+                # 🚀 CRITICAL: Update reply record with resolved attachment metadata
+                # so the portal can display and download the attachments
+                if resolved_reply_attachments:
+                    reply_att_metadata = []
+                    for ra in resolved_reply_attachments:
+                        ra_filename = ra.get('filename', 'attachment')
+                        # Find corresponding file_path from the original attachment list
+                        original_fp = ''
+                        for orig_att in attachments:
+                            orig_name = orig_att.get('filename', orig_att.get('fileName', orig_att.get('name', '')))
+                            if orig_name == ra_filename:
+                                original_fp = orig_att.get('file_path', '')
+                                break
+                        reply_att_metadata.append({
+                            'filename': ra_filename,
+                            'name': ra_filename,
+                            'fileName': ra_filename,
+                            'content_type': ra.get('content_type', 'application/octet-stream'),
+                            'type': 'file',
+                            'size': ra.get('size', 0) or (len(ra.get('data', '')) if ra.get('data') else 0),
+                            'source': 'reply',
+                            'has_data': bool(ra.get('data')),
+                            'file_path': original_fp
+                        })
+                    try:
+                        db.replies.update_one(
+                            {'_id': reply_id},
+                            {'$set': {'attachments': reply_att_metadata}}
+                        )
+                        logger.info(f"[REPLY-ATT] ✅ Updated reply {reply_id} with {len(reply_att_metadata)} resolved attachments")
+                    except Exception as update_err:
+                        logger.error(f"[REPLY-ATT] ❌ Failed to update reply attachments: {update_err}")
+                
             except requests.exceptions.Timeout:
                 logger.error(f"N8N webhook timeout for ticket {ticket_id}")
             except Exception as email_error:

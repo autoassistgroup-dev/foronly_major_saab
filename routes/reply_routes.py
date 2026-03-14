@@ -80,6 +80,33 @@ def download_reply_attachment_legacy(reply_id, attachment_index):
             except Exception as e:
                 logger.error(f"[LEGACY DOWNLOAD] Failed to decode base64 data: {e}")
         
+        # 🚀 TICKET FALLBACK: If reply has no usable data, check the ticket's own attachments
+        if not file_data:
+            ticket_id = reply.get('ticket_id')
+            if ticket_id:
+                try:
+                    ticket = db.tickets.find_one({'ticket_id': ticket_id})
+                    if ticket:
+                        ticket_atts = ticket.get('attachments', []) + ticket.get('simple_attachments', [])
+                        for ta in ticket_atts:
+                            ta_name = ta.get('filename', ta.get('name', ta.get('fileName', '')))
+                            if ta_name == filename:
+                                # Try disk path
+                                ta_fp = ta.get('file_path', '')
+                                if ta_fp and os.path.exists(ta_fp):
+                                    with open(ta_fp, 'rb') as f:
+                                        file_data = f.read()
+                                    logger.info(f"[LEGACY DOWNLOAD] ✅ Fallback: read {len(file_data)} bytes from ticket att: {ta_fp}")
+                                    break
+                                # Try inline data
+                                ta_data = ta.get('data', ta.get('fileData', ''))
+                                if ta_data and len(str(ta_data)) >= 10:
+                                    file_data = base64.b64decode(ta_data)
+                                    logger.info(f"[LEGACY DOWNLOAD] ✅ Fallback: decoded {len(file_data)} bytes from ticket att base64")
+                                    break
+                except Exception as ticket_err:
+                    logger.error(f"[LEGACY DOWNLOAD] Ticket fallback error: {ticket_err}")
+        
         if not file_data:
             logger.error(f"[LEGACY DOWNLOAD] No attachment data available for {filename}")
             return jsonify({'error': 'Attachment data not available'}), 404
@@ -148,6 +175,31 @@ def preview_reply_attachment_legacy(reply_id, attachment_index):
                 logger.info(f"[LEGACY PREVIEW] Successfully decoded {len(file_data)} bytes from base64")
             except Exception as e:
                 logger.error(f"[LEGACY PREVIEW] Failed to decode base64: {e}")
+        
+        # 🚀 TICKET FALLBACK: If reply has no usable data, check the ticket's own attachments
+        if not file_data:
+            ticket_id = reply.get('ticket_id')
+            if ticket_id:
+                try:
+                    ticket = db.tickets.find_one({'ticket_id': ticket_id})
+                    if ticket:
+                        ticket_atts = ticket.get('attachments', []) + ticket.get('simple_attachments', [])
+                        for ta in ticket_atts:
+                            ta_name = ta.get('filename', ta.get('name', ta.get('fileName', '')))
+                            if ta_name == filename:
+                                ta_fp = ta.get('file_path', '')
+                                if ta_fp and os.path.exists(ta_fp):
+                                    with open(ta_fp, 'rb') as f:
+                                        file_data = f.read()
+                                    logger.info(f"[LEGACY PREVIEW] ✅ Fallback: read {len(file_data)} bytes from ticket att: {ta_fp}")
+                                    break
+                                ta_data = ta.get('data', ta.get('fileData', ''))
+                                if ta_data and len(str(ta_data)) >= 10:
+                                    file_data = base64.b64decode(ta_data)
+                                    logger.info(f"[LEGACY PREVIEW] ✅ Fallback: decoded {len(file_data)} bytes from ticket att base64")
+                                    break
+                except Exception as ticket_err:
+                    logger.error(f"[LEGACY PREVIEW] Ticket fallback error: {ticket_err}")
         
         if not file_data:
             logger.error(f"[LEGACY PREVIEW] No attachment data available for {filename}")
