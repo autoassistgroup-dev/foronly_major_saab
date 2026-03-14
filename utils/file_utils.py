@@ -337,7 +337,12 @@ def extract_attachment_bytes(att):
         return raw, None
     if isinstance(raw, str):
         try:
-            return base64.b64decode(raw, validate=True), None
+            if raw.startswith('data:'):
+                comma_idx = raw.find(',')
+                if comma_idx > -1:
+                    raw = raw[comma_idx + 1:]
+            # validate=False handles padding issues more gracefully
+            return base64.b64decode(raw, validate=False), None
         except Exception as e:
             return None, str(e)
     return None, "unsupported data type"
@@ -429,17 +434,50 @@ def get_attachment_signature(att):
     """
     Generate a quick, unique signature for an attachment to detect duplicates.
     It hashes the first 10,000 chars of the base64 data (or bytes).
-    If no data is present, it hashes the filename and size.
+    If no data is present, it will fallback to reading from disk or hashing the filename+size.
     """
     import hashlib
+    import os
     if not att or not isinstance(att, dict):
         return "invalid"
         
     data, _ = extract_attachment_bytes(att)
+    
+    if not data and att.get('file_path') and os.path.exists(att['file_path']):
+        try:
+            with open(att['file_path'], 'rb') as f:
+                data = f.read(10000)
+        except Exception:
+            pass
+            
+    if not data and att.get('document_id'):
+        from database import get_db
+        from bson.objectid import ObjectId
+        try:
+            doc = get_db().common_documents.find_one({'_id': ObjectId(att['document_id'])})
+            if doc:
+                if doc.get('data') or doc.get('fileData'):
+                    data, _ = extract_attachment_bytes(doc)
+                elif doc.get('file_path') and os.path.exists(doc['file_path']):
+                    with open(doc['file_path'], 'rb') as f:
+                        data = f.read(10000)
+        except Exception:
+            pass
+
     if data:
         # Hash the first 10KB of raw bytes for speed, usually enough to prove uniqueness
         return hashlib.md5(data[:10000]).hexdigest()
         
     filename = att.get('filename', att.get('fileName', att.get('name', '')))
-    size = att.get('size', 0)
+    size = att.get('size')
+    
+    if size is None and att.get('file_path') and os.path.exists(att['file_path']):
+        try:
+            size = os.path.getsize(att['file_path'])
+        except Exception:
+            size = 0
+            
+    if size is None:
+        size = 0
+        
     return hashlib.md5(f"{filename}_{size}".encode('utf-8')).hexdigest()
