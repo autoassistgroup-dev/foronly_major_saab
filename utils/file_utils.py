@@ -424,3 +424,22 @@ def save_attachment_bytes_to_disk(upload_root, subdir, unique_prefix, filename, 
         }
     except Exception:
         return None
+
+def get_attachment_signature(att):
+    """
+    Generate a quick, unique signature for an attachment to detect duplicates.
+    It hashes the first 10,000 chars of the base64 data (or bytes).
+    If no data is present, it hashes the filename and size.
+    """
+    import hashlib
+    if not att or not isinstance(att, dict):
+        return "invalid"
+        
+    data, _ = extract_attachment_bytes(att)
+    if data:
+        # Hash the first 10KB of raw bytes for speed, usually enough to prove uniqueness
+        return hashlib.md5(data[:10000]).hexdigest()
+        
+    filename = att.get('filename', att.get('fileName', att.get('name', '')))
+    size = att.get('size', 0)
+    return hashlib.md5(f"{filename}_{size}".encode('utf-8')).hexdigest()

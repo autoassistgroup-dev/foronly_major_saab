@@ -390,6 +390,17 @@ def webhook_reply():
         if incoming_thread_id and isinstance(incoming_thread_id, str) and incoming_thread_id.strip():
             db.update_ticket(ticket_id, {'threadId': incoming_thread_id.strip()})
             logger.info(f"🔗 THREAD ID SAVED │ Ticket {ticket_id} │ threadId: {incoming_thread_id.strip()[:60]}")
+            
+        # 🚀 Deduplicate attachments against existing ticket & replies
+        from utils.file_utils import get_attachment_signature
+        existing_sigs = set()
+        for att in ticket.get('attachments', []):
+            sig = get_attachment_signature(att)
+            if sig != "invalid": existing_sigs.add(sig)
+        for r in db.replies.find({'ticket_id': ticket_id}):
+            for att in r.get('attachments', []):
+                sig = get_attachment_signature(att)
+                if sig != "invalid": existing_sigs.add(sig)
         
         # Normalize attachments — N8N sends as dict {"attachment1": {...}} or list [{...}]
         raw_attachments = data.get('attachments', [])
@@ -403,6 +414,13 @@ def webhook_reply():
         
         for att in raw_attachments:
             if isinstance(att, dict):
+                sig = get_attachment_signature(att)
+                if sig != 'invalid' and sig in existing_sigs:
+                    logger.info(f"📎 ATTACHMENT DUPLICATE IGNORED │ {att.get('filename', att.get('fileName', 'unnamed'))}")
+                    continue
+                if sig != 'invalid':
+                    existing_sigs.add(sig)
+                    
                 # Ensure filename exists (N8N uses fileName, we use filename)
                 if not att.get('filename'):
                     att['filename'] = att.get('fileName', att.get('name', 'attachment'))

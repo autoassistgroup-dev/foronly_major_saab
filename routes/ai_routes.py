@@ -166,10 +166,21 @@ def display_response():
             if email_body and ticket:
                 try:
                     from routes.webhook_routes import strip_email_quotes
+                    from utils.file_utils import get_attachment_signature
                     from datetime import timedelta
                     
                     full_message = strip_email_quotes(email_body)
                     
+                    # Deduplicate attachments against existing ticket & replies
+                    existing_sigs = set()
+                    for att in ticket.get('attachments', []):
+                        sig = get_attachment_signature(att)
+                        if sig != "invalid": existing_sigs.add(sig)
+                    for r in db.replies.find({'ticket_id': ticket_id}):
+                        for att in r.get('attachments', []):
+                            sig = get_attachment_signature(att)
+                            if sig != "invalid": existing_sigs.add(sig)
+                            
                     # Extract attachments from payload (if N8N sends them)
                     raw_attachments = data.get('attachments', [])
                     if isinstance(raw_attachments, dict):
@@ -177,6 +188,13 @@ def display_response():
                     payload_attachments = []
                     for att in (raw_attachments if isinstance(raw_attachments, list) else []):
                         if isinstance(att, dict):
+                            sig = get_attachment_signature(att)
+                            if sig != 'invalid' and sig in existing_sigs:
+                                logger.info(f"📎 ATTACHMENT DUPLICATE IGNORED │ {att.get('filename', att.get('fileName', 'unnamed'))}")
+                                continue
+                            if sig != 'invalid':
+                                existing_sigs.add(sig)
+                            
                             if not att.get('filename'):
                                 att['filename'] = att.get('fileName', 'attachment')
                             payload_attachments.append(att)
