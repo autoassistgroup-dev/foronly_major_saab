@@ -174,56 +174,8 @@ We have received your message and our team is reviewing it.
 Best regards,
 Auto Assist Group Support Team"""
         
-        # Get attachments (if any were uploaded/generated)
+        # Get attachments (only original ticket attachments, ignore claim docs and replies)
         raw_attachments = ticket.get('attachments', [])
-        
-        # 🚀 ALSO include claim documents — these are uploaded separately via the
-        # "Claim Documents" section and stored in a different collection
-        try:
-            claim_docs_cursor = db.claim_documents.find({
-                'ticket_id': str(ticket_id),
-                'is_deleted': {'$ne': True}
-            })
-            claim_docs = list(claim_docs_cursor)
-            if claim_docs:
-                for doc in claim_docs:
-                    raw_attachments.append({
-                        'name': doc.get('file_name', doc.get('filename', 'Document')),
-                        'filename': doc.get('file_name', doc.get('filename', 'Document')),
-                        'file_path': doc.get('file_path', ''),
-                        'data': doc.get('file_data', ''),
-                        'content_type': doc.get('file_type', 'application/octet-stream'),
-                        'size': doc.get('file_size', 0),
-                        'source': 'claim_document'
-                    })
-                logger.info(f"Added {len(claim_docs)} claim documents to email template attachments")
-        except Exception as cd_err:
-            logger.warning(f"Could not load claim documents for template: {cd_err}")
-        
-        # 🚀 ALSO include reply attachments — customer emails come with attachments
-        # that are stored in the replies collection, not on the ticket itself
-        try:
-            replies = db.get_replies_by_ticket(ticket_id)
-            for reply in replies:
-                reply_atts = reply.get('attachments', [])
-                for att in reply_atts:
-                    att_name = att.get('filename', att.get('name', att.get('fileName', '')))
-                    if att_name:
-                        raw_attachments.append({
-                            'name': att_name,
-                            'filename': att_name,
-                            'file_path': att.get('file_path', ''),
-                            'data': att.get('data', att.get('fileData', '')),
-                            'content_type': att.get('content_type', 'application/octet-stream'),
-                            'size': att.get('size', 0),
-                            'source': 'reply_attachment'
-                        })
-            if replies:
-                reply_att_count = sum(len(r.get('attachments', [])) for r in replies)
-                if reply_att_count > 0:
-                    logger.info(f"Added {reply_att_count} reply attachments to email template attachments")
-        except Exception as ra_err:
-            logger.warning(f"Could not load reply attachments for template: {ra_err}")
         
         # 🚀 LIGHTWEIGHT METADATA ONLY — DO NOT send base64 data to the frontend!
         # The frontend only needs to know the attachment name, path, and whether 
