@@ -449,10 +449,10 @@ def get_attachment_signature(att):
             comma_idx = raw.find(',')
             if comma_idx > -1:
                 raw = raw[comma_idx + 1:]
-        # Hash first 200 chars of base64 + filename = unique enough, instant speed
-        key = f"{filename}_{raw[:200]}"
+        # Hash first 200 chars of base64 = unique enough, instant speed
+        key = f"{raw[:200]}"
         return hashlib.md5(key.encode('utf-8')).hexdigest()
     
-    # Fallback: just filename + size
+    # Fallback: just size
     size = att.get('size', 0)
-    return hashlib.md5(f"{filename}_{size}".encode('utf-8')).hexdigest()
+    return hashlib.md5(f"{size}".encode('utf-8')).hexdigest()

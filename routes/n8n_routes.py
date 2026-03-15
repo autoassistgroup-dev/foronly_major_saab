@@ -15,7 +15,7 @@ import json
 from datetime import datetime
 from flask import Blueprint, jsonify, request
 
-from utils.file_utils import detect_warranty_form, save_ticket_attachment_to_disk
+from utils.file_utils import detect_warranty_form, save_ticket_attachment_to_disk, get_attachment_signature
 from utils.validators import extract_email
 from config.settings import Config
 
@@ -248,12 +248,23 @@ def process_n8n_email_data(raw_data):
         raw_attachments = data.get('attachments', [])
         if not isinstance(raw_attachments, list):
             raw_attachments = []
+        
         attachments = []
+        seen_signatures = set()
         has_warranty = False
         upload_root = Config.get_upload_folder()
+        
         for idx, att in enumerate(raw_attachments):
             if not isinstance(att, dict):
                 continue
+            
+            # De-duplicate: check if we've already seen this attachment content
+            signature = get_attachment_signature(att)
+            if signature in seen_signatures:
+                logger.info(f"Skipping duplicate attachment: {att.get('filename', 'unknown')} (signature: {signature})")
+                continue
+            seen_signatures.add(signature)
+            
             fn = att.get('filename') or att.get('fileName') or att.get('name') or 'attachment'
             if detect_warranty_form(fn):
                 has_warranty = True
