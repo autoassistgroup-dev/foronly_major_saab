@@ -375,33 +375,6 @@ def webhook_reply():
                         'idempotent': True
                     })
         
-        # ── Extract message_id from incoming reply to enable threading ──
-        # When a customer replies to our email, N8N sends the email's message_id.
-        # We save it to the ticket so future admin replies can thread properly.
-        incoming_message_id = data.get('message_id', data.get('messageId', data.get('internetMessageId', '')))
-        if incoming_message_id and isinstance(incoming_message_id, str) and incoming_message_id.strip():
-            incoming_message_id = incoming_message_id.strip()
-            # Save to ticket so subsequent admin replies use "Reply to thread" path
-            db.update_ticket(ticket_id, {'message_id': incoming_message_id})
-            logger.info(f"🔗 MESSAGE ID SAVED │ Ticket {ticket_id} │ message_id: {incoming_message_id[:60]}")
-        
-        # Also extract and save conversationId/threadId if present
-        incoming_thread_id = data.get('conversationId', data.get('threadId', data.get('conversation_id', '')))
-        if incoming_thread_id and isinstance(incoming_thread_id, str) and incoming_thread_id.strip():
-            db.update_ticket(ticket_id, {'threadId': incoming_thread_id.strip()})
-            logger.info(f"🔗 THREAD ID SAVED │ Ticket {ticket_id} │ threadId: {incoming_thread_id.strip()[:60]}")
-            
-        # 🚀 Deduplicate attachments against existing ticket & replies
-        from utils.file_utils import get_attachment_signature
-        existing_sigs = set()
-        for att in ticket.get('attachments', []):
-            sig = get_attachment_signature(att)
-            if sig != "invalid": existing_sigs.add(sig)
-        for r in db.replies.find({'ticket_id': ticket_id}):
-            for att in r.get('attachments', []):
-                sig = get_attachment_signature(att)
-                if sig != "invalid": existing_sigs.add(sig)
-        
         # Normalize attachments — N8N sends as dict {"attachment1": {...}} or list [{...}]
         raw_attachments = data.get('attachments', [])
         normalized_attachments = []
@@ -414,75 +387,18 @@ def webhook_reply():
         
         for att in raw_attachments:
             if isinstance(att, dict):
-                sig = get_attachment_signature(att)
-                if sig != 'invalid' and sig in existing_sigs:
-                    logger.info(f"📎 ATTACHMENT DUPLICATE IGNORED │ {att.get('filename', att.get('fileName', 'unnamed'))}")
-                    continue
-                if sig != 'invalid':
-                    existing_sigs.add(sig)
-                    
                 # Ensure filename exists (N8N uses fileName, we use filename)
                 if not att.get('filename'):
-                    att['filename'] = att.get('fileName', att.get('name', 'attachment'))
-                # Ensure name field is also set (template uses both)
-                if not att.get('name'):
-                    att['name'] = att.get('filename', 'attachment')
-                
-                # 🚀 CRITICAL: Tag as webhook source so frontend template shows it
-                # Template filters by source=='webhook' or type=='file'
-                att['source'] = 'webhook'
-                
-                # Normalize type — n8n may send content_type as 'type' (e.g. 'image/jpeg')
-                # but frontend expects type='file' for downloadable attachments
-                original_type = att.get('type', '')
-                if original_type and '/' in original_type:
-                    # This is a mime type, not an attachment type — move it to content_type
-                    att['content_type'] = original_type
-                    att['type'] = 'file'
-                elif not original_type:
-                    att['type'] = 'file'
-                
-                # 🚀 Save base64 data to disk so preview/download works
-                file_data = att.get('data', att.get('fileData', att.get('content', '')))
-                if file_data and isinstance(file_data, str) and len(file_data) > 10:
-                    try:
-                        import os
-                        from config.settings import Config
-                        upload_root = Config.get_upload_folder()
-                        att_dir = os.path.join(upload_root, 'webhook_attachments', ticket_id)
-                        os.makedirs(att_dir, exist_ok=True)
-                        
-                        # Strip data URI prefix if present
-                        raw_b64 = file_data
-                        if raw_b64.startswith('data:'):
-                            comma_idx = raw_b64.find(',')
-                            if comma_idx > -1:
-                                raw_b64 = raw_b64[comma_idx + 1:]
-                        
-                        file_bytes = base64.b64decode(raw_b64)
-                        safe_name = att['filename'].replace('/', '_').replace('\\', '_')
-                        file_path = os.path.join(att_dir, safe_name)
-                        with open(file_path, 'wb') as f:
-                            f.write(file_bytes)
-                        att['file_path'] = file_path
-                        att['size'] = len(file_bytes)
-                        att['has_data'] = True
-                        logger.info(f"📎 ATTACHMENT SAVED │ {att['filename']} → {file_path} ({len(file_bytes)} bytes)")
-                    except Exception as save_err:
-                        logger.warning(f"⚠️ ATTACHMENT │ Failed to save to disk: {save_err}")
-                        att['has_data'] = bool(file_data)
-                
+                    att['filename'] = att.get('fileName', 'attachment')
                 normalized_attachments.append(att)
             elif isinstance(att, str):
                 try:
                     encoded = base64.b64encode(att.encode('utf-8')).decode('utf-8')
                     normalized_attachments.append({
                         'filename': 'attachment.txt',
-                        'name': 'attachment.txt',
                         'content_type': 'text/plain',
                         'data': encoded,
-                        'type': 'file',
-                        'source': 'webhook'
+                        'type': 'file'
                     })
                 except Exception as e:
                     logger.warning(f"⚠️  ATTACHMENT │ Failed to normalize string attachment: {e}")
@@ -536,8 +452,7 @@ def webhook_reply():
                 
                 db.update_ticket(ticket_id, {
                     'has_unread_reply': True,
-                    'last_reply_at': datetime.now(),
-                    'updated_at': datetime.now()
+                    'last_reply_at': datetime.now()
                 })
                 
                 return jsonify({
@@ -577,8 +492,7 @@ def webhook_reply():
         # Update ticket with unread reply flag
         db.update_ticket(ticket_id, {
             'has_unread_reply': True,
-            'last_reply_at': datetime.now(),
-            'updated_at': datetime.now()
+            'last_reply_at': datetime.now()
         })
         
         logger.info(f"✅ REPLY SAVED │ Ticket {ticket_id} │ Message: {len(message)} chars │ Attachments: {len(normalized_attachments)}")
