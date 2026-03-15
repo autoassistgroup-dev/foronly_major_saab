@@ -405,6 +405,37 @@ def webhook_reply():
             else:
                 logger.warning(f"⚠️  ATTACHMENT │ Skipping invalid type: {type(att)}")
 
+        # ── DEDUP: Remove attachments whose filename already exists in this ticket ──
+        if normalized_attachments:
+            try:
+                existing_filenames = set()
+                # Collect filenames from the ticket itself
+                ticket_atts = ticket.get('attachments', []) if ticket else []
+                for a in ticket_atts:
+                    if isinstance(a, dict):
+                        fn = a.get('filename', a.get('fileName', ''))
+                        if fn:
+                            existing_filenames.add(fn)
+                # Collect filenames from all replies on this ticket
+                for reply in db.replies.find({'ticket_id': ticket_id}, {'attachments': 1}):
+                    for a in reply.get('attachments', []):
+                        if isinstance(a, dict):
+                            fn = a.get('filename', a.get('fileName', ''))
+                            if fn:
+                                existing_filenames.add(fn)
+                
+                if existing_filenames:
+                    before_count = len(normalized_attachments)
+                    normalized_attachments = [
+                        a for a in normalized_attachments
+                        if a.get('filename', a.get('fileName', '')) not in existing_filenames
+                    ]
+                    skipped = before_count - len(normalized_attachments)
+                    if skipped > 0:
+                        logger.info(f"🚫 DEDUP │ Ticket {ticket_id} │ Skipped {skipped} duplicate attachments by filename")
+            except Exception as e:
+                logger.warning(f"⚠️ DEDUP │ Error checking existing attachments: {e}")
+
         # ── MERGE CHECK: If display_response already created a reply (empty attachments), ──
         # ── merge our attachments into it instead of creating a duplicate.              ──
         if normalized_attachments:

@@ -150,6 +150,33 @@ def display_response():
                                 att['filename'] = att.get('fileName', 'attachment')
                             payload_attachments.append(att)
                     
+                    # ── DEDUP: Remove attachments whose filename already exists ──
+                    if payload_attachments and ticket:
+                        try:
+                            existing_filenames = set()
+                            for a in ticket.get('attachments', []):
+                                if isinstance(a, dict):
+                                    fn = a.get('filename', a.get('fileName', ''))
+                                    if fn:
+                                        existing_filenames.add(fn)
+                            for reply in db.replies.find({'ticket_id': ticket_id}, {'attachments': 1}):
+                                for a in reply.get('attachments', []):
+                                    if isinstance(a, dict):
+                                        fn = a.get('filename', a.get('fileName', ''))
+                                        if fn:
+                                            existing_filenames.add(fn)
+                            if existing_filenames:
+                                before_count = len(payload_attachments)
+                                payload_attachments = [
+                                    a for a in payload_attachments
+                                    if a.get('filename', a.get('fileName', '')) not in existing_filenames
+                                ]
+                                skipped = before_count - len(payload_attachments)
+                                if skipped > 0:
+                                    logger.info(f"🚫 DEDUP │ Ticket {ticket_id} │ Skipped {skipped} duplicate attachments by filename")
+                        except Exception as e:
+                            logger.warning(f"⚠️ DEDUP │ {e}")
+                    
                     if full_message and len(full_message) > 10:
                         # Find the most recent webhook reply for this ticket (within 5 min)
                         cutoff = datetime.now() - timedelta(minutes=5)
