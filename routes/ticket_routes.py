@@ -166,10 +166,42 @@ def create_ticket_webhook():
             existing_ticket = db.tickets.find_one({"thread_id": thread_id})
             
             if existing_ticket:
-                logger.info(f"Returning existing ticket {existing_ticket.get('ticket_id')} for thread {thread_id}")
+                logger.info(f"Appending reply to existing ticket {existing_ticket.get('ticket_id')} for thread {thread_id}")
+                
+                # We have an existing ticket, let's append this N8N payload as a reply!
+                message_text = processed.get('body') or processed.get('message') or processed.get('description', '')
+                if message_text:
+                    import uuid
+                    reply = {
+                        'id': str(uuid.uuid4()),
+                        'text': message_text,
+                        'sender': 'customer' if processed.get('email') == existing_ticket.get('email') else 'system',
+                        'timestamp': datetime.now(),
+                        'message_id': processed.get('message_id', ''),
+                        'attachments': processed.get('attachments', []),
+                        'draft': processed.get('draft', ''),
+                        'n8n_draft': processed.get('n8n_draft', '')
+                    }
+                    
+                    # Add reply to the replies array
+                    db.tickets.update_one(
+                        {"_id": existing_ticket["_id"]},
+                        {"$push": {"replies": reply}, "$set": {"updated_at": datetime.now(), "has_unread_reply": True, "status": "Open"}}
+                    )
+                    
+                    # Emit new reply event
+                    try:
+                        from socket_events import emit_new_reply
+                        emit_new_reply({
+                            'ticket_id': existing_ticket.get('ticket_id'),
+                            'reply': reply
+                        })
+                    except Exception as ev_err:
+                        logger.warning(f"Failed to emit new reply event: {ev_err}")
+                        
                 return jsonify({
                     'success': True, 
-                    'message': 'Ticket already exists',
+                    'message': 'Appended reply to existing ticket',
                     'ticket_id': existing_ticket.get('ticket_id'),
                     'db_id': str(existing_ticket.get('_id'))
                 })
@@ -773,14 +805,21 @@ def send_ticket_reply(ticket_id):
                         logger.error(f"[REPLY-ATT] ❌ Failed to update reply attachments: {update_err}")
 
                 # 6. Call Webhook for notification/external syncing
+                # ── FIX 1: Explicitly inject Ticket ID so customer replies thread correctly ──
+                subject_with_id = f"{ticket.get('subject', 'Your Support Request')} [Ticket ID: {ticket_id}]"
+                body_with_id = f"{message_plain}\n\n(Ticket ID: {ticket_id})"
+                
                 webhook_payload = {
                     'ticket_id': ticket_id,
                     'portal_reply_id': str(reply_id),
-                    'replyMessage': message_plain,
+                    'response_text': message_plain,
+                    'replyMessage': body_with_id,               # Injected ID in body
+                    'html_message': html_message,               # HTML version for reference
+                    
                     'customer_email': ticket.get('email'),
                     'email': ticket.get('email'),
-                    'ticket_subject': ticket.get('subject', 'Your Support Request'),
-                    'subject': ticket.get('subject', 'Your Support Request'),
+                    'ticket_subject': subject_with_id,          # Injected ID in subject
+                    'subject': subject_with_id,                 # Injected ID in subject
                     'customer_name': ticket.get('customer_name', ticket.get('name', '')),
                     'priority': ticket.get('priority', 'Medium'),
                     'ticket_status': ticket.get('status', 'Waiting for Response'),
