@@ -1,0 +1,1425 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "pollTimes": {
+                    "item": [
+                        {
+                            "mode": "everyMinute"
+                        }
+                    ]
+                },
+                "output": "raw",
+                "filters": {
+                    "hasAttachments": false,
+                    "readStatus": "unread"
+                },
+                "options": {
+                    "downloadAttachments": false
+                }
+            },
+            "type": "n8n-nodes-base.microsoftOutlookTrigger",
+            "typeVersion": 1,
+            "position": [
+                -1280,
+                1248
+            ],
+            "id": "cd95810a-a10b-4f89-9329-c9f056662ff8",
+            "name": "Microsoft Outlook Trigger",
+            "credentials": {
+                "microsoftOutlookOAuth2Api": {
+                    "id": "vATdwBaabb4NI99J",
+                    "name": "test 19 jan usman"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "getAll",
+                "returnAll": true,
+                "output": "raw",
+                "filtersUI": {
+                    "values": {
+                        "filters": {
+                            "custom": "=conversationId eq '{{ $('Microsoft Outlook Trigger').first().json.conversationId }}'"
+                        }
+                    }
+                },
+                "options": {
+                    "downloadAttachments": true
+                }
+            },
+            "type": "n8n-nodes-base.microsoftOutlook",
+            "typeVersion": 2,
+            "position": [
+                -848,
+                1248
+            ],
+            "id": "44b29879-fb64-4e27-98c1-c6c732072874",
+            "name": "Get many messages1",
+            "webhookId": "841e69ad-dda6-4e51-97b0-03c51de4ee53",
+            "credentials": {
+                "microsoftOutlookOAuth2Api": {
+                    "id": "vATdwBaabb4NI99J",
+                    "name": "test 19 jan usman"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "options": {}
+            },
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 3,
+            "position": [
+                32,
+                1456
+            ],
+            "id": "356c42f6-fce3-4d71-aeeb-635d2faa9c0b",
+            "name": "Loop Over Items2"
+        },
+        {
+            "parameters": {
+                "operation": "get",
+                "messageId": {
+                    "__rl": true,
+                    "value": "={{ $('Get many messages1').item.json.id }}",
+                    "mode": "id"
+                },
+                "output": "raw",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.microsoftOutlook",
+            "typeVersion": 2,
+            "position": [
+                320,
+                1472
+            ],
+            "id": "e32af836-ebe2-42d1-80aa-a6d2795f4bed",
+            "name": "Get a message",
+            "webhookId": "dcb05b36-aa66-4c3c-b4d4-367369685480",
+            "credentials": {
+                "microsoftOutlookOAuth2Api": {
+                    "id": "vATdwBaabb4NI99J",
+                    "name": "test 19 jan usman"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const item = $node[\"Get a message\"].json;\nlet messageContent = item.body.content;\n\n// If content is HTML, extract text between <body> or <div> tags\nif (item.body.contentType === \"html\") {\n  // Simple regex to extract content before quoted replies\n  const match = messageContent.match(/<body[^>]*>(.*?)(?:<div[^>]*class=\"gmail_quote\"|<hr[^>]*>|From:)/is);\n  messageContent = match ? match[1].replace(/<[^>]+>/g, '').trim() : messageContent.replace(/<[^>]+>/g, '').trim();\n}\n\n// Remove extra whitespace and newlines\nmessageContent = messageContent.replace(/\\s+/g, ' ').trim();\n\n// Return formatted output\nreturn [{\n  json: {\n    subject:item.subject,\n    name: item.sender.emailAddress.name || \"Unknown\",\n    email: item.sender.emailAddress.address,\n    date: item.receivedDateTime,\n    message: messageContent\n  }\n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                544,
+                1552
+            ],
+            "id": "f91b7087-c648-4489-ad65-1d87db7bd55b",
+            "name": "Code7"
+        },
+        {
+            "parameters": {
+                "promptType": "define",
+                "text": "=🤖 AI Agent Prompt for n8n Email Processing\n🧠 Role\n\nYou are an intelligent AI email assistant integrated within an automated workflow (n8n). You specialize in analyzing incoming emails, understanding prior conversation history, classifying the message, assigning priority, and generating professional responses when appropriate.\n\nYou also have access to external knowledge via a Retrieval-Augmented Generation (RAG) system. Use it to enhance the accuracy of replies.\n\n📥 Input\n\nEach incoming email contains the following fields:\n\nSender name: {{ $('Loop Over Items2').last().json.name }}\n\nSubject: {{ $('Loop Over Items2').last().json.subject }}\n\nBody: {{ $('Loop Over Items2').last().json.message }}\n\nfour digit ticket number: {{ $('Code8').item.json.ticketNo }}\n\nPrevious conversation: {{ JSON.stringify($json) }} — a chronological summary of all past messages in the thread\n\nThread ID: {{ $('Get many messages1').first().json.conversationId }} — unique ID to manage replies and new emails\n\n🔁 Special Condition: Reply Detection\n🔎 If Subject starts with Re: (e.g., Re: testingApology)\n\nDo NOT generate a new ticket ID.\n\nExtract the existing ticket ID from the Previous conversation field (look for phrases like “Ticket ID: XX1234”).\n\nUse this ticket ID in your response.\n\nThe reply must go to the same thread ID: {{ $('Get many messages1').first().json.conversationId }}\n\nContinue the conversation formally, acknowledging context from previous messages.\n\n🧾 Tasks\n1. Email Type Classification\n\nSelect one of the following categories that best describes the email content:\n\nSupport\n\nPayment\n\nSpam\n\nTechnical Issue\n\nOthers\n\nUse RAG when helpful to interpret unclear or technical messages.\n\n2. Priority Level\n\nAssign one of the following based on urgency:\n\nUrgent – Needs immediate attention\n\nFast – Time-sensitive but not an emergency\n\nMedium – Routine communication\n\nLow – Can be handled later\n\nIgnore – Spam, irrelevant, or auto-notifications\n\nMake this decision based on content, not just tone. Do not assign \"Urgent\" unless it's clearly critical.\n\n3. Draft a Reply (Only if Priority ≠ Ignore)\n\nCompose a professional, clear, and polite response including:\n\nA greeting using the sender’s name (``)\n\nA clear mention of the ticket ID immediately after the sender’s name and before the comma\n\nA tailored message responding specifically to the user's issue\n\nDo not say \"our team will contact you\" unless it's actually required\n\nUse RAG knowledge only if needed to give accurate answers\n\n🎫 Ticket ID Rules\n\nFor new messages (no Re: in subject):\nGenerate the Ticket ID using this format:\nTHIS 6 DIGITS[{{ $('Code8').item.json.ticketNo }}]\nExample: 429144\n\nFor replies (subject starts with Re:):\nDo not generate a new ticket ID.\nExtract the ticket ID from the Previous conversation instead.\nExample: 454291\n\n🔁 Special Condition: Reply Detection (Subject starts with Re:)\n\nIf the Subject starts with Re: (e.g., Re: testingApology), apply the following logic:\n\nDo NOT generate a new ticket ID.\n\nExtract the existing ticket ID from the Previous conversation (search for lines like “Ticket ID: XX1234”).\n\nUse this ticket ID in your response.\n\nSend the reply to the same thread ID: {{ $('Get many messages1').first().json.conversationId }}\n\nFocus primarily on the latest message body — try to understand the user’s current intent or follow-up concern put much focus to understand the user concerns.\n\nUse Previous conversation only as background context — do not restate old details unless directly relevant.\n\nPrioritize clarity, intent interpretation, and resolution of the new message.\n\n📌 Rules\n\nIf the email is marked as Spam or Ignore, the reply must be completely blank\n\nIf Priority is Urgent, include a specific resolution time (e.g., “within 1 hour”)\n\nFor Payment, never request or mention sensitive information\n\nAlways include the Ticket ID like (Ticket ID: 551032) in replies\n\nReplies must go to the same thread ID: {{ $('Get many messages1').first().json.conversationId }}\n\n✅ Output Format (Strict)\n\nAlways return your result using this exact format:\n\nReply: Dear Usman (Ticket ID: PF3872),\nWe’ve received your payment-related inquiry.\nOur billing department is reviewing your request and will follow up shortly.\n\nSincerely,\nCustomer Services\n\nReply: Dear {{ $json.name }} (Ticket ID: 551032),\n[Your message content here, with line breaks if needed. Include ticket reference like (Ticket ID: 551032) immediately after the name]\n\nSincerely,\n[Specific Department]\n\n🚨 Final Reminders\n\nNever shorten or summarize the email body — always use the full context\n\nDon’t add vague statements like “we’ll contact you” unless it applies to the case\n\nRAG should only enrich, not invent answers or hallucinate facts\n\nKeep tone formal, clear, and respectful — no emojis or casual language\n\nAlways respect the thread ID and ticket continuity when replying\n",
+                "hasOutputParser": true,
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.agent",
+            "typeVersion": 2,
+            "position": [
+                1232,
+                1312
+            ],
+            "id": "66159349-3a45-4981-bb1a-adeff299e999",
+            "name": "AI Agent",
+            "retryOnFail": true,
+            "maxTries": 2,
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "model": {
+                    "__rl": true,
+                    "mode": "list",
+                    "value": "gpt-4.1-mini"
+                },
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+            "typeVersion": 1.2,
+            "position": [
+                1104,
+                1536
+            ],
+            "id": "6afae319-5baf-4632-a6fc-2c0e1310cb95",
+            "name": "OpenAI Chat Model",
+            "credentials": {
+                "openAiApi": {
+                    "id": "Vxn2kCrSJHIYI9NJ",
+                    "name": "delete after someone else just for the. test"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsonSchemaExample": "{\n  \"name\": \"\",\n  \"Subject\": \"\",\n  \"Classification\":\"\",\n  \"Priority\":\"\",\n  \"body\": \"\",\n  \"final_ticket_id\": \"\",\n  \"specific department\":\"\",\n  \"threadI=id\": \"\"\n\n}"
+            },
+            "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+            "typeVersion": 1.3,
+            "position": [
+                1520,
+                1536
+            ],
+            "id": "53792575-17cf-4655-b67b-de8243452d04",
+            "name": "Structured Output Parser"
+        },
+        {
+            "parameters": {
+                "description": "The dataset contains daily customer questions and corresponding answers. It is used to generate mor accurate, context-aware, and personalized email responses based on real interaction patterns."
+            },
+            "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
+            "typeVersion": 1.1,
+            "position": [
+                1232,
+                1536
+            ],
+            "id": "2eb015ea-eb62-4ff2-b837-6b1e6bdba8ee",
+            "name": "Answer questions with a vector store"
+        },
+        {
+            "parameters": {
+                "model": {
+                    "__rl": true,
+                    "value": "gpt-4o-mini",
+                    "mode": "list",
+                    "cachedResultName": "gpt-4o-mini"
+                },
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+            "typeVersion": 1.2,
+            "position": [
+                1408,
+                1744
+            ],
+            "id": "fb3b9db2-7ff8-498d-aed2-7baf4fdd9e9e",
+            "name": "OpenAI Chat Model4",
+            "credentials": {
+                "openAiApi": {
+                    "id": "8EzYMItoqZ7m2snb",
+                    "name": "OpenAi account 3"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "pineconeIndex": {
+                    "__rl": true,
+                    "value": "rag-agent",
+                    "mode": "list",
+                    "cachedResultName": "rag-agent"
+                },
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+            "typeVersion": 1.3,
+            "position": [
+                1120,
+                1744
+            ],
+            "id": "10d50310-a7ed-4fa6-859c-e1562bcb40ff",
+            "name": "Pinecone Vector Store",
+            "credentials": {
+                "pineconeApi": {
+                    "id": "G9aFkYp36t20icuW",
+                    "name": "PineconeApi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+            "typeVersion": 1.2,
+            "position": [
+                1200,
+                1968
+            ],
+            "id": "224d5941-04bb-4029-a1d6-da9f4d36f2d9",
+            "name": "Embeddings OpenAI",
+            "credentials": {
+                "openAiApi": {
+                    "id": "Vxn2kCrSJHIYI9NJ",
+                    "name": "delete after someone else just for the. test"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "364cb864-2a64-4392-a52d-871181fc3302",
+                            "name": "subject",
+                            "value": "={{ $('Loop Over Items2').first().json.subject }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "0e538f62-db01-4363-92c3-5cd5b5f9f6aa",
+                            "name": "name",
+                            "value": "={{ $('Loop Over Items2').first().json.name }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "b8c41a13-413e-492d-a88d-c2299025b3c8",
+                            "name": "email",
+                            "value": "={{ $('Loop Over Items2').first().json.email }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "84231fc0-a28a-40b6-8f04-74b64967906a",
+                            "name": "date",
+                            "value": "={{ $('Loop Over Items2').first().json.date }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "2176dbc1-8bea-4175-807d-5be12c41bc47",
+                            "name": "message",
+                            "value": "={{ $('Loop Over Items2').first().json.message }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                880,
+                1312
+            ],
+            "id": "2cd608c8-dc6a-472c-af14-560041852d4a",
+            "name": "Edit Fields6"
+        },
+        {
+            "parameters": {
+                "operation": "binaryToPropery",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.extractFromFile",
+            "typeVersion": 1,
+            "position": [
+                224,
+                1008
+            ],
+            "id": "1c9d5498-6130-4d17-b1d6-44a0d574a17c",
+            "name": "Extract from File1"
+        },
+        {
+            "parameters": {
+                "jsCode": "const input = $input.first();\n\n// Parse the JSON string if necessary\nlet findname = input.json.findname;\n\nif (typeof findname === 'string') {\n  try {\n    findname = JSON.parse(findname);\n  } catch (e) {\n    findname = {};\n  }\n}\n\n// Now extract the fileName\nconst fileName = findname?.data?.fileName || 'no-filename';\n\nreturn [\n  {\n    json: {\n      filename: fileName\n    }\n  }\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                672,
+                1072
+            ],
+            "id": "f26e8b46-590f-47f0-bf84-7d31a9d4256c",
+            "name": "Code9"
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "b1308523-9be7-4fb1-8da5-daccc1e284c0",
+                            "name": "findname",
+                            "value": "={{ $('Code10').item.binary }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                448,
+                1008
+            ],
+            "id": "1305d1b4-94e7-48d5-973b-ae70d1716c8f",
+            "name": "Edit Fields7"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Output array to store split attachments\nconst out = [];\n\nfor (const inItem of items) {\n  // Get all binary data in the current item (email, etc.)\n  const binaries = inItem.binary ?? {};\n\n  for (const [key, bin] of Object.entries(binaries)) {\n    out.push({\n      json: {\n        sourceEmailIndex: inItem.$index,\n        originalKey: key,\n      },\n      binary: {\n        data: bin, // n8n will look for 'data' key in binary\n      },\n    });\n  }\n}\n\nreturn out;\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -224,
+                816
+            ],
+            "id": "6c350895-a992-4772-99a2-0992a87a0dab",
+            "name": "Code10"
+        },
+        {
+            "parameters": {
+                "options": {}
+            },
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 3,
+            "position": [
+                0,
+                1008
+            ],
+            "id": "3d1205c2-4699-47f5-a07f-ccac666513b5",
+            "name": "Loop Over Items3"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 2
+                    },
+                    "conditions": [
+                        {
+                            "id": "06759e8c-ca04-4f76-ad55-5894d5f80f82",
+                            "leftValue": "={{ $json.hasAttachments }}",
+                            "rightValue": "=true",
+                            "operator": {
+                                "type": "boolean",
+                                "operation": "true",
+                                "singleValue": true
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                -448,
+                912
+            ],
+            "id": "31c572d4-03e7-4e00-96e1-e496061a9693",
+            "name": "If1"
+        },
+        {
+            "parameters": {},
+            "type": "n8n-nodes-base.noOp",
+            "typeVersion": 1,
+            "position": [
+                -224,
+                1056
+            ],
+            "id": "82aa2e2a-b751-4ab2-a08d-8858d3f9b65c",
+            "name": "stop1"
+        },
+        {
+            "parameters": {
+                "resource": "document",
+                "modelId": {
+                    "__rl": true,
+                    "value": "models/gemini-2.0-flash",
+                    "mode": "list",
+                    "cachedResultName": "models/gemini-2.0-flash"
+                },
+                "text": "=Check if the title or first line of this text contains the phrase \"WARRANTY FORM\" (case-insensitive).\n\nIf it does, return true like when the WARRANTY FORM Received successful.\nIf not, return false when no warranty form recived.\n\nwhen only one is true is ouput is true if all the attachments are false output is false\nlike OR gate one is true all ture\n\n\njust return the output single thing true or false nothings else",
+                "inputType": "binary",
+                "simplify": false,
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.googleGemini",
+            "typeVersion": 1,
+            "position": [
+                0,
+                608
+            ],
+            "id": "8eaa3fbf-702a-443c-b0a9-74d05ed7f3fc",
+            "name": "Gemini1",
+            "retryOnFail": true,
+            "maxTries": 2,
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "O13czBTVyCJtAN2z",
+                    "name": "Google Gemini(PaLM) Api account 2"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "1ba26257-4321-4cd1-bd4e-de5d2b02de90",
+                            "name": "fileName",
+                            "value": "={{ $json.filename }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "3aa95149-0a90-41db-9dbe-6f00a1c7563f",
+                            "name": "from",
+                            "value": "={{ $('Microsoft Outlook Trigger').first().json.from }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "a515c705-6c4c-4892-9053-4801563743a8",
+                            "name": "fileData",
+                            "value": "={{ $('Extract from File1').item.json.data }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "d340dcdb-1841-4291-81ed-c01d06bc740a",
+                            "name": "subject",
+                            "value": "={{ $('Microsoft Outlook Trigger').first().json.subject }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                224,
+                816
+            ],
+            "id": "d9574428-33d7-473d-b4ba-cf39b62f9d72",
+            "name": "Attachment detail1"
+        },
+        {
+            "parameters": {
+                "mode": "raw",
+                "jsonOutput": "={\n  \"result\": {{ $items().some(item => item.json.candidates[0].content.parts[0].text.trim().toLowerCase() === \"true\") }}\n}\n",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                224,
+                608
+            ],
+            "id": "d9a64716-3efe-449d-8de2-f75b8c7e2bab",
+            "name": "results1",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "const crypto = require('crypto');\n\n// Take conversationId from the first input item\nconst item = $input.first().json;\nconst conversationId = item.conversationId || '';\n\n// Use only conversationId for deterministic ID\nconst inputString = conversationId;\n\n// Generate MD5 hash\nconst hash = crypto.createHash('md5').update(inputString).digest('hex');\n\n// Convert hash to a number and extract 6 digits\nconst numericValue = parseInt(hash.substring(0, 8), 16); // safer size\nconst sixDigitId = (numericValue % 1000000).toString().padStart(6, '0');\n\n// Add index and ticketNo to all items\nreturn items.map((item, index) => {\n  item.json.index = index;\n  item.json.ticketNo = sixDigitId;\n  return item;\n});\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                448,
+                608
+            ],
+            "id": "7b080fc9-87bd-4895-84d7-b6cde229d465",
+            "name": "Code11",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "const crypto = require('crypto');\n\n// Take conversationId from the first input item\nconst item = $input.first().json;\nconst conversationId = item.conversationId || '';\n\n// Use only conversationId for deterministic ID\nconst inputString = conversationId;\n\n// Generate MD5 hash\nconst hash = crypto.createHash('md5').update(inputString).digest('hex');\n\n// Convert hash to a number and extract 6 digits\nconst numericValue = parseInt(hash.substring(0, 8), 16); // safer size\nconst sixDigitId = (numericValue % 1000000).toString().padStart(6, '0');\n\n// Add index and ticketNo to all items\nreturn items.map((item, index) => {\n  item.json.index = index;\n  item.json.ticketNo = sixDigitId;\n  return item;\n});\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                448,
+                816
+            ],
+            "id": "3a7180c5-1f34-4d0f-8b76-c0945aebb29f",
+            "name": "Code12"
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "b3e26988-03e4-49b5-877f-dee54bd36984",
+                            "name": "index",
+                            "value": "={{ $json.index }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "08867bfb-fab2-44da-a1ac-639a07872faf",
+                            "name": "result",
+                            "value": "={{ $json.result }}",
+                            "type": "boolean"
+                        },
+                        {
+                            "id": "5afe3dce-ceb8-4417-a1f9-502e94333e78",
+                            "name": "ticketNo",
+                            "value": "={{ $json.ticketNo }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                672,
+                608
+            ],
+            "id": "2f97ce44-d257-48f1-9bc5-cfa2c1c6c6bb",
+            "name": "Edit Fields8",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "bee8aadb-4170-49d1-a77c-caae33af1cc7",
+                            "name": "index",
+                            "value": "={{ $json.index }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "5d09afa2-a763-4033-96c1-da501b3a0726",
+                            "name": "fileName",
+                            "value": "={{ $json.fileName }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "6f3a8c9b-2d84-4e15-9f27-abc123def456",
+                            "name": "from",
+                            "value": "={{ $json.from }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "7e4b9d2a-3c85-5f26-8e38-bcd234eff567",
+                            "name": "fileData",
+                            "value": "={{ $json.fileData }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "8d5c0e3b-4d96-6037-9f49-cde345f00678",
+                            "name": "subject",
+                            "value": "={{ $json.subject }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                672,
+                816
+            ],
+            "id": "a6743f4b-ec03-4122-8bd8-fc7bc874bcb8",
+            "name": "Edit Fields9"
+        },
+        {
+            "parameters": {
+                "mode": "combineBySql",
+                "query": "SELECT \n  CAST(input2.`index` AS INTEGER) AS `index`,\n  input1.result,\n  input1.ticketNo,\n  input2.fileName,\n  input2.`from`,\n  input2.fileData,\n  input2.subject\nFROM \n  input1\nINNER JOIN \n  input2 \nON \n  1=1\nORDER BY \n  CAST(input2.`index` AS INTEGER)\n",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.merge",
+            "typeVersion": 3.2,
+            "position": [
+                960,
+                720
+            ],
+            "id": "050be817-8fc0-4b79-bafc-d09e15a7d876",
+            "name": "Merge3",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "0f7e2g5d-6f18-8259-1b6b-efg567h22890",
+                            "name": "result",
+                            "value": "={{ $json.result }}",
+                            "type": "boolean"
+                        },
+                        {
+                            "id": "2h9g4i7f-8h30-0471-3d8d-ghi789j44012",
+                            "name": "fileName",
+                            "value": "={{ $json.fileName }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "4j1i6k9h-0j52-2693-5f0f-ijk901l66234",
+                            "name": "fileData",
+                            "value": "={{ $json.fileData }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                1664,
+                720
+            ],
+            "id": "cf05ab58-c476-42a5-99a3-159a20193e4d",
+            "name": "Final Format",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {},
+            "type": "n8n-nodes-base.merge",
+            "typeVersion": 3.2,
+            "position": [
+                2160,
+                976
+            ],
+            "id": "4c0ca27e-4e49-468d-bc2d-71cafcb8a3c5",
+            "name": "Merge1"
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "5a1424b8-7b77-4974-af10-133c28a1b9c0",
+                            "name": "threadId",
+                            "value": "={{ $json.output['threadI=id'] }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "addb1fcb-438f-43ca-a72b-dc10064becb4",
+                            "name": "name",
+                            "value": "={{ $json.output.name.toTitleCase() }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "a2e11220-c542-42eb-89ee-6be570dd2c70",
+                            "name": "subject",
+                            "value": "={{ $json.output.Subject }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "bc935fab-6d44-45d2-9fb5-2e5819bf54e6",
+                            "name": "body",
+                            "value": "={{ $('Code in JavaScript2').first().json.extractedText }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "f4a12637-d693-45a1-8ea4-bcb1e74c1762",
+                            "name": "Classification",
+                            "value": "={{ $json.output.Classification }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "6b973a17-c159-4593-a30b-62240b59e140",
+                            "name": "Priority",
+                            "value": "={{ $json.output.Priority }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "c5767f12-8197-48d9-8ad9-f3348777153d",
+                            "name": "ticket_id",
+                            "value": "={{ $json.output.final_ticket_id }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "6f51ddfe-272a-483e-b3e4-584eb023a394",
+                            "name": "from",
+                            "value": "={{ $('Microsoft Outlook Trigger').first().json.from.emailAddress.address }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "780bffe6-1b38-49b9-8ed0-f1f4aec1b6f9",
+                            "name": "date",
+                            "value": "={{ $('Edit Fields6').item.json.date }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "aff68e7e-cc1b-463f-b94e-f787d190c12e",
+                            "name": "draft",
+                            "value": "={{ $json.output.body }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "c3cbb2f5-a47d-4db7-a1a0-5cc58aac4343",
+                            "name": "messageid",
+                            "value": "={{ $('Get a message').first().json.id }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "29ab086f-58ff-4618-8085-c8d359c2c5d8",
+                            "name": "n8n_draft",
+                            "value": "={{ $json.output.body }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                1728,
+                1312
+            ],
+            "id": "c0f07bc8-92ee-4964-8397-35c59c3e8738",
+            "name": "Edit Fields10"
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "c5633095-4995-47ff-810e-5ab4b7ac0724",
+                            "name": "complete",
+                            "value": "={{ $json }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                2384,
+                976
+            ],
+            "id": "d2a7ced2-8bb1-400d-86e8-f45dfa26d66a",
+            "name": "Edit Fields11"
+        },
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\nconsole.log('Processing items:', items.length);\n\n// Separate attachments from ticket info\nconst attachments = [];\nlet ticketInfo = null;\n\nfor (const item of items) {\n  if (item.json.complete) {\n    try {\n      const parsed = JSON.parse(item.json.complete);\n\n      // Check if this is an attachment\n      if (parsed.fileName && parsed.fileData) {\n        attachments.push({\n          fileName: parsed.fileName,\n          fileData: parsed.fileData,\n          result: parsed.result || false\n        });\n      }\n      // Check if this is ticket information\n      else if (parsed.ticket_id) {\n        // Remove all instances of (Ticket ID: XYZ) anywhere in the draft\n        let cleanDraft = parsed.draft || '';\n        \n\n        // Optional: Normalize multiple line breaks or fix spacing if needed\n        cleanDraft = cleanDraft.replace(/\\n{2,}/g, '\\n\\n'); // ensure max two line breaks\n        cleanDraft = cleanDraft.replace(/[ \\t]+\\n/g, '\\n'); // remove trailing spaces before newline\n\n        ticketInfo = {\n          ...parsed,\n          draft: cleanDraft\n        };\n      }\n    } catch (error) {\n      console.log('Error parsing JSON:', error);\n    }\n  }\n}\n\nconsole.log('Found attachments:', attachments.length);\nconsole.log('Found ticket info:', ticketInfo ? 'Yes' : 'No');\n\n// If we have both ticket info and attachments, combine them\nif (ticketInfo && attachments.length > 0) {\n  const combinedTicket = {\n    ...ticketInfo,\n    attachments: attachments\n  };\n\n  return [{\n    json: combinedTicket\n  }];\n}\n\n// If we only have ticket info (no attachments)\nelse if (ticketInfo) {\n  return [{\n    json: {\n      ...ticketInfo,\n      attachments: []\n    }\n  }];\n}\n\n// If we only have attachments (no ticket info)\nelse if (attachments.length > 0) {\n  return [{\n    json: {\n      ticket_id: `file-${Date.now()}`,\n      name: 'File Upload User',\n      from: 'fileupload@system.com',\n      body: `Uploaded ${attachments.length} file(s): ${attachments.map(a => a.fileName).join(', ')}`,\n      Classification: 'File Upload',\n      Priority: 'Medium',\n      date: new Date().toISOString(),\n      threadId: '',\n      messageid: `msg-${Date.now()}`,\n      attachments: attachments\n    }\n  }];\n}\n\n// No valid data found\nelse {\n  return [{\n    json: {\n      error: 'No valid ticket or attachment data found'\n    }\n  }];\n}\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2608,
+                976
+            ],
+            "id": "4af39594-f439-4ae1-a80a-3a5f761fd2e8",
+            "name": "Code13"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://auto-assist-portal.vercel.app/api/tickets",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ $json}}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                3056,
+                880
+            ],
+            "id": "5526cf2f-dccd-4da7-a4f9-4027a0b8d617",
+            "name": "HTTP Request"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "loose",
+                        "version": 2
+                    },
+                    "conditions": [
+                        {
+                            "id": "5550b97a-3d80-4c4b-a0f7-ea932fa96f14",
+                            "leftValue": "={{ $('Microsoft Outlook Trigger').first().json.subject }}",
+                            "rightValue": "RE:",
+                            "operator": {
+                                "type": "string",
+                                "operation": "notStartsWith"
+                            }
+                        },
+                        {
+                            "id": "d2614449-a4fe-4764-bd1e-d9ce5e253f24",
+                            "leftValue": "={{ $('Microsoft Outlook Trigger').first().json.subject }}",
+                            "rightValue": "Re:",
+                            "operator": {
+                                "type": "string",
+                                "operation": "notStartsWith"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "looseTypeValidation": true,
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                2832,
+                976
+            ],
+            "id": "5e0c7aa9-0a8c-4fd8-9c05-9e98758a8832",
+            "name": "If3"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://auto-assist-portal.vercel.app/api/ai/display-response",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ $json }}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                3056,
+                1072
+            ],
+            "id": "b5c23768-4a67-4c34-9b58-ff163ae70f0c",
+            "name": "AI Draft Input1"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Get the HTML content from the input\nconst htmlContent = $input.first().json.body.content || '';\n\n// Function to decode HTML entities\nfunction decodeHTMLEntities(text) {\n  const entities = {\n    '&amp;': '&',\n    '&lt;': '<',\n    '&gt;': '>',\n    '&quot;': '\"',\n    '&apos;': \"'\",\n    '&#39;': \"'\",\n    '&nbsp;': ' ',\n    '&mdash;': '—',\n    '&ndash;': '–',\n    '&rsquo;': \"'\",\n    '&lsquo;': \"'\",\n    '&rdquo;': '\"',\n    '&ldquo;': '\"',\n    '&hellip;': '...',\n  };\n  \n  return text.replace(/&[#\\w]+;/g, entity => entities[entity] || entity);\n}\n\n// Function to remove HTML tags and extract text\nfunction extractTextFromHTML(html) {\n  if (!html) return '';\n  \n  // Remove script and style tags with their content\n  let text = html.replace(/<script\\b[^<]*(?:(?!<\\/script>)<[^<]*)*<\\/script>/gi, '');\n  text = text.replace(/<style\\b[^<]*(?:(?!<\\/style>)<[^<]*)*<\\/style>/gi, '');\n  \n  // Remove HTML comments\n  text = text.replace(/<!--[\\s\\S]*?-->/g, '');\n  \n  // Replace common block elements with newlines\n  text = text.replace(/<\\/(div|p|h[1-6]|li|tr|br)>/gi, '\\n');\n  text = text.replace(/<br\\s*\\/?>/gi, '\\n');\n  \n  // Remove all remaining HTML tags\n  text = text.replace(/<[^>]+>/g, '');\n  \n  // Decode HTML entities\n  text = decodeHTMLEntities(text);\n  \n  // Clean up whitespace\n  text = text.replace(/\\n\\s*\\n/g, '\\n\\n'); // Remove excessive newlines\n  text = text.replace(/[ \\t]+/g, ' '); // Normalize spaces\n  text = text.trim();\n  \n  return text;\n}\n\n// Function to extract specific attributes\nfunction extractAttributes(html) {\n  const attributes = {};\n  \n  // Extract text from title tags\n  const titleMatch = html.match(/<title[^>]*>(.*?)<\\/title>/i);\n  if (titleMatch) attributes.title = titleMatch[1].trim();\n  \n  // Extract meta descriptions\n  const metaDescMatch = html.match(/<meta[^>]*name=[\"']description[\"'][^>]*content=[\"']([^\"']*)[\"']/i);\n  if (metaDescMatch) attributes.metaDescription = metaDescMatch[1];\n  \n  // Extract all links\n  const links = [];\n  const linkRegex = /<a[^>]*href=[\"']([^\"']*)[\"'][^>]*>(.*?)<\\/a>/gi;\n  let linkMatch;\n  while ((linkMatch = linkRegex.exec(html)) !== null) {\n    links.push({\n      url: linkMatch[1],\n      text: extractTextFromHTML(linkMatch[2])\n    });\n  }\n  if (links.length > 0) attributes.links = links;\n  \n  return attributes;\n}\n\n// Extract everything\nconst extractedText = extractTextFromHTML(htmlContent);\n\n// Return the result\nreturn {\n  json: {\n    extractedText: extractedText\n  }\n};"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -1072,
+                1248
+            ],
+            "id": "9c3b60c1-5bba-42e0-922d-4a767cfc50ce",
+            "name": "Code in JavaScript2"
+        },
+        {
+            "parameters": {
+                "jsCode": "const crypto = require('crypto');\nconst items = $input.all(); // Get all items from the loop\n\nlet existingTicketId = null;\n\n// Function to extract ticket IDs from message\nfunction extractTicketIds(text) {\n  // NEW FORMAT: M + 5 alphanumeric chars (e.g. M6AA2F, M7F499)\n  const newPattern = /M[A-Z0-9]{5}/g;\n  const newMatches = text.match(newPattern);\n  if (newMatches && newMatches.length > 0) return newMatches;\n  \n  // OLD FORMAT fallback: 2 letters from [E,W,T,S,G,O] + 4 digits\n  const oldPattern = /[EWTSG0]{2}\\d{4}/g;\n  const oldMatches = text.match(oldPattern);\n  return oldMatches || [];\n}\n\n// Loop through all iterations to find existing ticket ID\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i].json;\n  const message = item.message || \"\";\n  \n  // Extract ticket IDs from this iteration's message\n  const ticketIds = extractTicketIds(message);\n  \n  if (ticketIds.length > 0) {\n    // Found a ticket ID in one of the iterations\n    existingTicketId = ticketIds[0];\n    break; // Stop searching once we find a ticket\n  }\n}\n\n// If we found an existing ticket ID in any iteration, return it\nif (existingTicketId) {\n  return [{\n    json: {\n      ticketNo: existingTicketId,\n      source: \"existing\" // Optional: indicates this was found, not generated\n    }\n  }];\n}\n\n// If no ticket found in any iteration, generate a new ticket number\n// NEW FORMAT: M + 5 random uppercase hex chars\nconst firstItem = items[0].json;\nconst conversationId = firstItem.conversationId || \"\";\nconst salt = Date.now().toString() + Math.random().toString();\nconst inputString = conversationId + salt;\nconst hash = crypto.createHash('md5').update(inputString).digest('hex');\nconst ticketNo = 'M' + hash.substring(0, 5).toUpperCase();\n\nreturn [{\n  json: {\n    ticketNo,\n    source: \"generated\" // Optional: indicates this was newly generated\n  }\n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                672,
+                1312
+            ],
+            "id": "e6e24efc-63b2-4b27-825e-d43b82ffd1c5",
+            "name": "Code8"
+        }
+    ],
+    "connections": {
+        "Microsoft Outlook Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Code in JavaScript2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get many messages1": {
+            "main": [
+                [
+                    {
+                        "node": "Loop Over Items2",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "If1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Loop Over Items2": {
+            "main": [
+                [
+                    {
+                        "node": "Code8",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Get a message",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get a message": {
+            "main": [
+                [
+                    {
+                        "node": "Code7",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Code7": {
+            "main": [
+                [
+                    {
+                        "node": "Loop Over Items2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "AI Agent": {
+            "main": [
+                [
+                    {
+                        "node": "Edit Fields10",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "OpenAI Chat Model": {
+            "ai_languageModel": [
+                [
+                    {
+                        "node": "AI Agent",
+                        "type": "ai_languageModel",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Structured Output Parser": {
+            "ai_outputParser": [
+                [
+                    {
+                        "node": "AI Agent",
+                        "type": "ai_outputParser",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Answer questions with a vector store": {
+            "ai_tool": [
+                [
+                    {
+                        "node": "AI Agent",
+                        "type": "ai_tool",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "OpenAI Chat Model4": {
+            "ai_languageModel": [
+                [
+                    {
+                        "node": "Answer questions with a vector store",
+                        "type": "ai_languageModel",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Pinecone Vector Store": {
+            "ai_vectorStore": [
+                [
+                    {
+                        "node": "Answer questions with a vector store",
+                        "type": "ai_vectorStore",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Embeddings OpenAI": {
+            "ai_embedding": [
+                [
+                    {
+                        "node": "Pinecone Vector Store",
+                        "type": "ai_embedding",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Edit Fields6": {
+            "main": [
+                [
+                    {
+                        "node": "AI Agent",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Extract from File1": {
+            "main": [
+                [
+                    {
+                        "node": "Edit Fields7",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Code9": {
+            "main": [
+                [
+                    {
+                        "node": "Loop Over Items3",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Edit Fields7": {
+            "main": [
+                [
+                    {
+                        "node": "Code9",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Code10": {
+            "main": [
+                [
+                    {
+                        "node": "Loop Over Items3",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Gemini1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Loop Over Items3": {
+            "main": [
+                [
+                    {
+                        "node": "Attachment detail1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Extract from File1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "If1": {
+            "main": [
+                [
+                    {
+                        "node": "Code10",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "stop1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Gemini1": {
+            "main": [
+                [
+                    {
+                        "node": "results1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Attachment detail1": {
+            "main": [
+                [
+                    {
+                        "node": "Code12",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "results1": {
+            "main": [
+                [
+                    {
+                        "node": "Code11",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Code11": {
+            "main": [
+                [
+                    {
+                        "node": "Edit Fields8",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Code12": {
+            "main": [
+                [
+                    {
+                        "node": "Edit Fields9",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Edit Fields8": {
+            "main": [
+                [
+                    {
+                        "node": "Merge3",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Edit Fields9": {
+            "main": [
+                [
+                    {
+                        "node": "Merge3",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Merge3": {
+            "main": [
+                [
+                    {
+                        "node": "Final Format",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Final Format": {
+            "main": [
+                [
+                    {
+                        "node": "Merge1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Merge1": {
+            "main": [
+                [
+                    {
+                        "node": "Edit Fields11",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Edit Fields10": {
+            "main": [
+                [
+                    {
+                        "node": "Merge1",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Edit Fields11": {
+            "main": [
+                [
+                    {
+                        "node": "Code13",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Code13": {
+            "main": [
+                [
+                    {
+                        "node": "If3",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "If3": {
+            "main": [
+                [
+                    {
+                        "node": "HTTP Request",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "AI Draft Input1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Code in JavaScript2": {
+            "main": [
+                [
+                    {
+                        "node": "Get many messages1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Code8": {
+            "main": [
+                [
+                    {
+                        "node": "Edit Fields6",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {
+        "Microsoft Outlook Trigger": [
+            {
+                "@odata.etag": "W/\"CQAAABYAAAAl1w9v3DqpR6xkz5FglkxTAAAS4vOD\"",
+                "id": "AAMkAGYyNDYyYjgyLTRlZmMtNGU0NC05NjU2LWM2MjBmOTU2OTcyMwBGAAAAAAD2hxyE_m8lSK-Iw9wb702HBwAl1w9v3DqpR6xkz5FglkxTAAAAAAEMAAAl1w9v3DqpR6xkz5FglkxTAAAS8PXvAAA=",
+                "createdDateTime": "2026-02-14T21:44:06Z",
+                "lastModifiedDateTime": "2026-02-14T21:44:07Z",
+                "changeKey": "CQAAABYAAAAl1w9v3DqpR6xkz5FglkxTAAAS4vOD",
+                "categories": [],
+                "receivedDateTime": "2026-02-14T21:44:06Z",
+                "sentDateTime": "2026-02-14T21:43:49Z",
+                "hasAttachments": false,
+                "internetMessageId": "<CACtpsvtk1+24J77CJQuC3YUPf_o98qQDEAZxR4bWV7=nR8-QMg@mail.gmail.com>",
+                "subject": "test shit agian",
+                "bodyPreview": "Dear [Recipient Name],\r\n\r\nI would like to test this again with a larger scope. Could you please provide a more substantial version for this test?\r\n\r\nPlease let me know if you need any further details to proceed with this larger scale testing.\r\n\r\nBest rega",
+                "importance": "normal",
+                "parentFolderId": "AQMkAGYyNDYyYjgyLTRlZmMtNGU0NAAtOTY1Ni1jNjIwZjk1Njk3MjMALgAAA-aHHIT6byVIr8jD3BvvTYcBACXXD2-cOqlHrGTPkWCWTFMAAAIBDAAAAA==",
+                "conversationId": "AAQkAGYyNDYyYjgyLTRlZmMtNGU0NC05NjU2LWM2MjBmOTU2OTcyMwAQAJml9AyHLUFGrClpe7A5Mdo=",
+                "conversationIndex": "AQHcnfsLmaX0DIctQUasKWl7sDkx2g==",
+                "isDeliveryReceiptRequested": null,
+                "isReadReceiptRequested": false,
+                "isRead": false,
+                "isDraft": false,
+                "webLink": "https://outlook.office365.com/owa/?ItemID=AAMkAGYyNDYyYjgyLTRlZmMtNGU0NC05NjU2LWM2MjBmOTU2OTcyMwBGAAAAAAD2hxyE%2Bm8lSK%2FIw9wb702HBwAl1w9v3DqpR6xkz5FglkxTAAAAAAEMAAAl1w9v3DqpR6xkz5FglkxTAAAS8PXvAAA%3D&exvsurl=1&viewmodel=ReadMessageItem",
+                "inferenceClassification": "focused",
+                "body": {
+                    "contentType": "html",
+                    "content": "<html><head>\r\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"></head><body><div dir=\"ltr\"><div>Dear [Recipient Name],</div><div><br></div><div>I would like to test this again with a larger scope. Could you please provide a more substantial version for this test?</div><div><br></div><div>Please let me know if you need any further details to proceed with this larger scale testing.</div><div><br></div><div>Best regards,</div><div><br></div><div>AutoAssist Developer</div><br></div></body></html>"
+                },
+                "sender": {
+                    "emailAddress": {
+                        "name": "AutoAssist Developer",
+                        "address": "usafas22@gmail.com"
+                    }
+                },
+                "from": {
+                    "emailAddress": {
+                        "name": "AutoAssist Developer",
+                        "address": "usafas22@gmail.com"
+                    }
+                },
+                "toRecipients": [
+                    {
+                        "emailAddress": {
+                            "name": "Warranty",
+                            "address": "warranty@autoassistgroup.com"
+                        }
+                    }
+                ],
+                "ccRecipients": [],
+                "bccRecipients": [],
+                "replyTo": [],
+                "flag": {
+                    "flagStatus": "notFlagged"
+                }
+            }
+        ]
+    },
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "4ef5ab5a5c0cc7b18cf6e39be162cdf4d49f82eff48105fb32f35a3ff2e4165c"
+    }
+}

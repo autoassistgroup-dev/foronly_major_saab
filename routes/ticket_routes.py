@@ -805,8 +805,9 @@ def send_ticket_reply(ticket_id):
                         logger.error(f"[REPLY-ATT] ❌ Failed to update reply attachments: {update_err}")
 
                 # 6. Call Webhook for notification/external syncing
-                # ── FIX 1: Explicitly inject Ticket ID so customer replies thread correctly ──
-                subject_with_id = f"{ticket.get('subject', 'Your Support Request')} [Ticket ID: {ticket_id}]"
+                # ── FIX 1: Explicitly inject Ticket ID into BODY ONLY so customer replies thread correctly ──
+                # Do NOT inject into subject, as altering the original subject breaks Gmail/Outlook email threading!
+                original_subject = ticket.get('subject', 'Your Support Request')
                 body_with_id = f"{message_plain}\n\n(Ticket ID: {ticket_id})"
                 
                 webhook_payload = {
@@ -818,8 +819,8 @@ def send_ticket_reply(ticket_id):
                     
                     'customer_email': ticket.get('email'),
                     'email': ticket.get('email'),
-                    'ticket_subject': subject_with_id,          # Injected ID in subject
-                    'subject': subject_with_id,                 # Injected ID in subject
+                    'ticket_subject': original_subject,         # Kept original to preserve email threads
+                    'subject': original_subject,                # Kept original to preserve email threads
                     'customer_name': ticket.get('customer_name', ticket.get('name', '')),
                     'priority': ticket.get('priority', 'Medium'),
                     'ticket_status': ticket.get('status', 'Waiting for Response'),
