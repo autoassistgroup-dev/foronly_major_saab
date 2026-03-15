@@ -397,6 +397,9 @@ def ticket_detail(ticket_id):
         flash('Ticket not found', 'error')
         return redirect(url_for('main.index'))
     
+    # Mark ticket as viewed (clears has_unread_notification)
+    db.mark_ticket_viewed(ticket_id)
+    
     # Sanitize ticket for template (n8n/API tickets may have None or malformed fields)
     ticket = _sanitize_ticket_for_template(ticket)
         

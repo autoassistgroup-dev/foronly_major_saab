@@ -14,6 +14,7 @@ Author: AutoAssistGroup Development Team
 import os
 import logging
 import base64
+import mimetypes
 from datetime import datetime
 from flask import Blueprint, jsonify, request, send_file, make_response
 from werkzeug.utils import secure_filename
@@ -315,6 +316,13 @@ def download_document(document_id):
         
         # Determine MIME type
         mime_type = get_mime_type(filename)
+        
+        # Fallback if generic or unknown
+        if not mime_type or mime_type == 'application/octet-stream':
+            guessed_type, _ = mimetypes.guess_type(filename)
+            if guessed_type:
+                logger.info(f"[COMMON_DOC_DOWNLOAD] Guessed MIME type for {filename}: {guessed_type}")
+                mime_type = guessed_type
         
         # Create response with proper headers
         response = make_response(file_data)

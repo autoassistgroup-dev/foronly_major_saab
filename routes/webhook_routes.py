@@ -527,10 +527,12 @@ def webhook_reply():
         except Exception as e:
             logger.warning(f"⚠️  SOCKET │ Failed to emit reply event: {e}")
         
-        # Update ticket with unread reply flag
+        # Update ticket with unread reply flag, activity timestamp, and unread notification flag
         db.update_ticket(ticket_id, {
             'has_unread_reply': True,
-            'last_reply_at': datetime.now()
+            'last_reply_at': datetime.now(),
+            'updated_at': datetime.now(),
+            'has_unread_notification': True
         })
         
         logger.info(f"✅ REPLY SAVED │ Ticket {ticket_id} │ Message: {len(message)} chars │ Attachments: {len(normalized_attachments)}")

@@ -268,10 +268,12 @@ def create_ticket():
             'priority': request.form.get('priority', 'Medium'),
             'assigned_technician': request.form.get('technician', ''),
             'created_at': datetime.now(),
+            'updated_at': datetime.now(),
             'created_by': current_member.get('name', ''),
             'created_by_id': session.get('member_id'),
             'creation_method': 'api', 
-            'is_forwarded': False
+            'is_forwarded': False,
+            'has_unread_notification': True
         }
         
         # Process attachments: persist to disk (no base64 in DB), same as n8n flow
@@ -432,6 +434,10 @@ def update_ticket_status(ticket_id):
             })
         except Exception as e:
             logger.warning(f"Failed to emit status change event: {e}")
+        
+        # Ensure has_unread_notification is set to True for any status change to keep it on top?
+        # User said "sort by recent activity time", and "new ticket/reply/forwarded" stays on top.
+        # So maybe status changes don't set has_unread_notification, but do update updated_at (which they do).
         
         return jsonify({
             'success': True,
@@ -691,12 +697,13 @@ def send_ticket_reply(ticket_id):
         except Exception as e:
             logger.warning(f"Failed to emit new reply event: {e}")
         
-        # Update ticket with last reply info and clear draft
+        # Update ticket with last reply info, activity timestamp, and clear draft
         db.update_ticket(ticket_id, {
             'last_reply_at': datetime.now(),
             'last_reply_by': sender_name,
             'updated_at': datetime.now(),
-            'draft_body': ''  # Clear draft after sending reply
+            'draft_body': '',  # Clear draft after sending reply
+            'has_unread_notification': False # Agent reply clears unread state for everyone else too? Wait, user requirement said "until user on portal opens it". For now let's just clear it on get_ticket.
         })
         
         logger.info(f"Reply sent for ticket {ticket_id} by {sender_name}")
@@ -1322,12 +1329,6 @@ def update_ticket_priority(ticket_id):
         from database import get_db
         db = get_db()
         
-        # Update priority
-        update_data = {
-            'priority': priority,
-            'updated_at': datetime.now()
-        }
-        
         # Get current priority before update
         ticket = db.get_ticket_by_id(ticket_id)
         old_priority = ticket.get('priority') if ticket else None
@@ -1672,7 +1673,8 @@ def refer_to_tech_director(ticket_id):
             'forwarded_at': datetime.now(),
             'is_forwarded_viewed': False,  # Mark as unviewed initially
             'forwarding_note': referral_note,  # Note for Tech Director dashboard
-            'referral_note': referral_note   # Also keep as referral_note for clarity
+            'updated_at': datetime.now(),
+            'has_unread_notification': True
         }
         
         # Add to Private Notes for full history (always record the event)

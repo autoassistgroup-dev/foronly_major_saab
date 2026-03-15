@@ -372,11 +372,15 @@ class MongoDB:
                 pipeline.append({"$match": match_stage})
             
             # Ensure updated_at exists (fallback to created_at for older tickets)
-            pipeline.append({"$addFields": {"updated_at": {"$ifNull": ["$updated_at", "$created_at"]}}})
+            # Also ensure has_unread_notification exists
+            pipeline.append({"$addFields": {
+                "updated_at": {"$ifNull": ["$updated_at", "$created_at"]},
+                "has_unread_notification": {"$ifNull": ["$has_unread_notification", False]}
+            }})
             
             # Sort -> Skip -> Limit BEFORE lookups (optimization: reduce lookup volume)
-            # Sort by UPDATED date: tickets with newest activity (reply, status change, forward) on top
-            pipeline.append({"$sort": {"updated_at": -1}})
+            # Sort by UNREAD flag first, then by UPDATED date
+            pipeline.append({"$sort": {"has_unread_notification": -1, "updated_at": -1}})
             
             skip = (page - 1) * per_page
             pipeline.extend([
@@ -595,6 +599,30 @@ class MongoDB:
                 "classifications": {},
                 "total_tickets": 0
             }
+
+    def set_ticket_unread(self, ticket_id, state=True):
+        """Set the unread notification flag for a ticket"""
+        try:
+            self.tickets.update_one(
+                {"ticket_id": ticket_id},
+                {"$set": {"has_unread_notification": state}}
+            )
+            return True
+        except Exception as e:
+            logging.error(f"Failed to set ticket unread for {ticket_id}: {e}")
+            return False
+
+    def mark_ticket_viewed(self, ticket_id):
+        """Clear the unread notification flag for a ticket"""
+        try:
+            self.tickets.update_one(
+                {"ticket_id": ticket_id},
+                {"$set": {"has_unread_notification": False}}
+            )
+            return True
+        except Exception as e:
+            logging.error(f"Failed to mark ticket viewed for {ticket_id}: {e}")
+            return False
 
     def get_forwarded_tickets_to_user(self, member_id):
         """
