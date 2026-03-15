@@ -390,15 +390,21 @@ def webhook_reply():
                 # Ensure filename exists (N8N uses fileName, we use filename)
                 if not att.get('filename'):
                     att['filename'] = att.get('fileName', 'attachment')
+                
+                # Standardize metadata for portal display
+                att['source'] = 'webhook_base64'
+                att['type'] = 'file'
+                
                 normalized_attachments.append(att)
             elif isinstance(att, str):
                 try:
                     encoded = base64.b64encode(att.encode('utf-8')).decode('utf-8')
                     normalized_attachments.append({
-                        'filename': 'attachment.txt',
+                        'filename': f'attachment_{datetime.now().strftime("%H%M%S")}.txt',
                         'content_type': 'text/plain',
                         'data': encoded,
-                        'type': 'file'
+                        'type': 'file',
+                        'source': 'webhook_base64'
                     })
                 except Exception as e:
                     logger.warning(f"⚠️  ATTACHMENT │ Failed to normalize string attachment: {e}")
@@ -425,14 +431,15 @@ def webhook_reply():
                                 existing_filenames.add(fn)
                 
                 if existing_filenames:
-                    before_count = len(normalized_attachments)
-                    normalized_attachments = [
-                        a for a in normalized_attachments
-                        if a.get('filename', a.get('fileName', '')) not in existing_filenames
-                    ]
-                    skipped = before_count - len(normalized_attachments)
-                    if skipped > 0:
-                        logger.info(f"🚫 DEDUP │ Ticket {ticket_id} │ Skipped {skipped} duplicate attachments by filename")
+                    for a in normalized_attachments:
+                        fn = a.get('filename', '')
+                        if fn in existing_filenames:
+                            # Rename instead of skipping to prevent data loss
+                            base, ext = os.path.splitext(fn)
+                            new_fn = f"{base}_{datetime.now().strftime('%M%S')}{ext}"
+                            logger.info(f"🔄 DEDUP │ Renaming duplicate {fn} → {new_fn}")
+                            a['filename'] = new_fn
+                            a['fileName'] = new_fn
             except Exception as e:
                 logger.warning(f"⚠️ DEDUP │ Error checking existing attachments: {e}")
 
@@ -472,10 +479,10 @@ def webhook_reply():
                     emit_new_reply(ticket_id, {
                         'reply_id': str(existing_reply['_id']),
                         'ticket_id': ticket_id,
-                        'message': existing_reply.get('message', message),
+                        'message': update_fields.get('message', existing_reply.get('message', message)),
                         'sender_name': existing_reply.get('sender_name', 'Customer'),
                         'sender_type': 'customer',
-                        'attachments': len(normalized_attachments),
+                        'attachments': normalized_attachments,
                         'created_at': existing_reply.get('created_at', datetime.now()).isoformat()
                     })
                 except Exception as e:
@@ -514,7 +521,7 @@ def webhook_reply():
                 'message': message,
                 'sender_name': reply_data['sender_name'],
                 'sender_type': 'customer',
-                'attachments': len(data.get('attachments', [])),
+                'attachments': normalized_attachments,
                 'created_at': datetime.now().isoformat()
             })
         except Exception as e:
