@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/e python3
 """
 Ticket API Routes
 
