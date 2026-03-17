@@ -777,8 +777,21 @@ def send_ticket_reply(ticket_id):
                     
                     # Ensure base64 strings DO NOT have the data URI prefix for n8n email node
                     # Outlook expects pure base64. If the data URI prefix is present, the file corrupts.
-                    if file_data and isinstance(file_data, str) and 'base64,' in file_data:
-                        file_data = file_data.split('base64,', 1)[1]
+                    # HOWEVER, manual tickets using the Send Email Node template branch require the prefix.
+                    is_email_ticket = ticket.get('is_email_ticket', False)
+                    # Use the same logic as the frontend payload to map to 'manual' vs 'email' 
+                    creation_method = ticket.get('creation_method', 'manual')
+                    is_manual = ticket.get('source') == 'manual' or creation_method in ('manual', 'api') or not is_email_ticket
+
+                    if file_data and isinstance(file_data, str):
+                        if not is_manual:
+                            # Email Ticket (Outlook branch): stripping prefix
+                            if 'base64,' in file_data:
+                                file_data = file_data.split('base64,', 1)[1]
+                        else:
+                            # Manual Ticket (Template branch): Needs the full data URI
+                            if not file_data.startswith('data:'):
+                                file_data = f"data:{mime_type};base64,{file_data}"
                     
                     resolved_reply_attachments.append({
                         'filename': filename,
@@ -875,6 +888,7 @@ def send_ticket_reply(ticket_id):
                     'attachment_count': len(resolved_reply_attachments),
                     'body': ticket.get('body', ''),
                     'message': message_plain,
+                    'content': body_with_id,  # Added this field for manual ticket N8N branch payload compatibility
                     'timestamp': datetime.now().isoformat()
                 }
                 
