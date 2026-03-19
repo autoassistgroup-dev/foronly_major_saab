@@ -876,6 +876,7 @@ def send_ticket_reply(ticket_id):
                     'body': ticket.get('body', ''),
                     'message': message_plain,
                     'content': body_with_id,  # Added this field for manual ticket N8N branch payload compatibility
+                    'response-type': 'reply', # Added per user request to distinguish from template
                     'timestamp': datetime.now().isoformat()
                 }
                 
@@ -1250,6 +1251,7 @@ def send_ticket_email(ticket_id):
                     'body': ticket.get('body', ''), 
                     'message': body_plain,
                     'content': body_plain,
+                    'response-type': 'email-template', # Added per user request to distinguish from simple reply
                     'timestamp': datetime.now().isoformat()
                 }
                 
