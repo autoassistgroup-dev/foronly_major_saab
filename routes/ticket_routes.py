@@ -302,6 +302,7 @@ def create_ticket():
                         "fileName": saved["filename"],
                         "file_path": saved["file_path"],
                         "data": saved.get("data"),  # ROBUSTNESS: include base64 data in DB
+                        "fileData": saved.get("data"),
                         "mime_type": saved.get("mime_type", file_obj.content_type or "application/octet-stream"),
                         "size": saved["size"],
                     })
@@ -796,6 +797,7 @@ def send_ticket_reply(ticket_id):
                     resolved_reply_attachments.append({
                         'filename': filename,
                         'data': file_data,
+                        'fileData': file_data,
                         'content_type': mime_type,
                         'size': att.get('size', 0)
                     })
@@ -1180,6 +1182,7 @@ def send_ticket_email(ticket_id):
                     resolved_attachments.append({
                         'filename': filename,
                         'data': file_data,
+                        'fileData': file_data,
                         'content_type': mime_type
                     })
                     logger.info(f"[EMAIL-ATT] Final: {filename}, data_length={data_len}")
