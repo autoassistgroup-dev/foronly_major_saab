@@ -613,11 +613,14 @@ class MongoDB:
             return False
 
     def mark_ticket_viewed(self, ticket_id):
-        """Clear the unread notification flag for a ticket"""
+        """Clear the unread notification and reply flags for a ticket"""
         try:
             self.tickets.update_one(
                 {"ticket_id": ticket_id},
-                {"$set": {"has_unread_notification": False}}
+                {"$set": {
+                    "has_unread_notification": False,
+                    "has_unread_reply": False
+                }}
             )
             return True
         except Exception as e:
@@ -900,7 +903,8 @@ class MongoDB:
                 {
                     "$set": {
                         "is_forwarded_viewed": True,
-                        "forwarded_viewed_at": datetime.now()
+                        "forwarded_viewed_at": datetime.now(),
+                        "has_unread_notification": False
                     }
                 }
             )

@@ -490,6 +490,7 @@ def webhook_reply():
                 
                 db.update_ticket(ticket_id, {
                     'has_unread_reply': True,
+                    'has_unread_notification': True,
                     'last_reply_at': datetime.now()
                 })
                 

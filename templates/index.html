@@ -882,6 +882,7 @@
             line-height: 1.5;
             display: -webkit-box;
             -webkit-line-clamp: 6;
+            line-clamp: 6;
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
@@ -1541,7 +1542,7 @@
                         {% for ticket in tickets %}
                         <tr class="ticket-card" onclick="window.location='/ticket/{{ ticket.ticket_id }}'">
                             <td class="td-id">
-                                {% if ticket.has_unread_notification %}<div class="unread-indicator"></div>{% endif %}
+                                {% if ticket.has_unread_notification or ticket.has_unread_reply %}<span class="unread-dot"></span>{% endif %}
                                 #{{ ticket.ticket_id }}
                                 {% if ticket.is_important %}<i class="fas fa-star star-indicator"></i>{% endif %}
                             </td>
@@ -2130,8 +2131,8 @@
 
                 showToast('New Ticket', `#${data.ticket_id}: ${data.subject}`, 'info');
 
-                // Optionally refresh the page or prepend ticket to list
-                addNewTicketToList(data);
+                // Prepend ticket to list and refresh unread status via AJAX sync
+                refreshIndexTickets();
             });
 
             // Listen for new replies
@@ -2142,28 +2143,7 @@
                 notificationSound.play().catch(e => console.log('Audio autoplay blocked:', e));
 
                 showToast('New Reply', `#${data.ticket_id}: ${data.sender_name} replied`, 'success');
-
-                // Move ticket to top and add unread indicator
-                const ticketCard = document.querySelector(`a[href="/ticket/${data.ticket_id}"]`);
-                if (ticketCard) {
-                    const ticketParent = ticketCard.closest('.ticket-card') || ticketCard.closest('tr');
-                    if (ticketParent) {
-                        const container = ticketParent.parentElement;
-                        if (container) {
-                            container.prepend(ticketParent);
-                        }
-                    }
-                    
-                    // Add unread indicator if not present
-                    if (!ticketCard.querySelector('.unread-indicator')) {
-                        const content = ticketCard.querySelector('.ticket-content') || ticketCard.querySelector('.td-id');
-                        if (content) {
-                            const indicator = document.createElement('div');
-                            indicator.className = 'unread-indicator';
-                            content.prepend(indicator);
-                        }
-                    }
-                }
+                refreshIndexTickets();
             });
 
             // Listen for ticket updates (status/priority)
@@ -2430,108 +2410,6 @@
                 }, 5000);
             }
 
-            // Add new ticket to list dynamically
-            function addNewTicketToList(ticketData) {
-                try {
-                    const ticketGrid = document.getElementById('mainTicketsGrid') || document.querySelector('.tickets-grid');
-                    if (!ticketGrid) {
-                        console.error('[SOCKET] Ticket grid not found!');
-                        return;
-                    }
-
-                    // Check if ticket already exists
-                    if (document.querySelector(`a[href="/ticket/${ticketData.ticket_id}"]`)) {
-                        console.log('[SOCKET] Ticket already in list:', ticketData.ticket_id);
-                        return; // Already in list
-                    }
-
-                    console.log('[SOCKET] Rendering new ticket:', ticketData);
-
-                    // Safe Defaults
-                    const priority = ticketData.priority || 'Medium';
-                    const status = ticketData.status || 'New';
-                    const subject = ticketData.subject || 'No Subject';
-                    const name = ticketData.name || 'Anonymous';
-                    const email = ticketData.email || 'No Email';
-                    const ticketId = ticketData.ticket_id || 'Unknown';
-                    const isManual = ticketId.startsWith('M');
-                    const methodClass = isManual ? 'method-manual' : 'method-email';
-                    const methodIcon = isManual ? 'fa-user-edit' : 'fa-envelope';
-                    const methodText = isManual ? 'Manual' : 'Email';
-
-                    // Classes
-                    const priorityClass = priority === 'Urgent' ? 'badge-urgent' :
-                        priority === 'Fast' ? 'badge-fast' :
-                            priority === 'Medium' ? 'badge-medium' : 'badge-low';
-
-                    const statusClass = status === 'Open' ? 'status-open' :
-                        status === 'Waiting for Response' ? 'status-waiting' :
-                            status === 'Resolved' ? 'status-resolved' : 'status-new';
-
-                    const ticketCard = document.createElement('div');
-                    ticketCard.className = 'ticket-card';
-                    ticketCard.style.animation = 'slideIn 0.5s ease-out';
-
-                    // Unread indicator for new tickets
-                    const unreadHtml = '<div class="unread-indicator"></div>';
-
-                    // Check if ticket is forwarded
-                    const isForwarded = ticketData.is_forwarded || false;
-                    const forwardedToName = ticketData.forwarded_to_member && ticketData.forwarded_to_member.length > 0
-                        ? ticketData.forwarded_to_member[0].name
-                        : (ticketData.forwarded_to_member_name || null);
-                    const forwardedBadge = (isForwarded && forwardedToName)
-                        ? `<span class="status-badge badge-forwarded" style="background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.25); color: #3b82f6;">
-                            <i class="fas fa-share" style="font-size: 9px; margin-right: 4px;"></i>Forwarded to ${forwardedToName}
-                           </span>`
-                        : '';
-
-                    ticketCard.innerHTML = `
-                        <a href="/ticket/${ticketId}">
-                            ${unreadHtml}
-                            <div class="ticket-content">
-                                <div class="ticket-badges">
-                                    <span class="ticket-id">#${ticketId}</span>
-                                    <span class="priority-badge ${priorityClass}">${priority}</span>
-                                    <!-- Classification omitted for simplicity in dynamic render -->
-                                    ${forwardedBadge}
-                                    <span class="status-badge ${statusClass}">${status}</span>
-                                </div>
-                                <h3 class="ticket-subject">${subject}</h3>
-                                <p class="ticket-body">${ticketData.body || 'No Body'}</p>
-                                <div class="ticket-meta">
-                                    <span><i class="fas fa-user"></i>${name}</span>
-                                    <span><i class="fas fa-envelope"></i>${email}</span>
-                                    <span><i class="fas fa-clock"></i>Just now</span>
-                                </div>
-                            </div>
-                            <div class="ticket-sidebar">
-                                <span class="method-badge ${methodClass}">
-                                    <i class="fas ${methodIcon}"></i> ${methodText}
-                                </span>
-                            </div>
-                        </a>
-                    `;
-
-                    // Prepend to list (newest first)
-                    ticketGrid.prepend(ticketCard);
-
-                    // Update total count
-                    const totalBadge = document.querySelector('.total-badge');
-                    if (totalBadge) {
-                        const currentText = totalBadge.textContent;
-                        const match = currentText.match(/(\d+)/);
-                        if (match) {
-                            const currentTotal = parseInt(match[0]);
-                            totalBadge.textContent = `Total: ${currentTotal + 1}`;
-                        } else {
-                            totalBadge.textContent = 'Total: Updated';
-                        }
-                    }
-                } catch (e) {
-                    console.error('[SOCKET] Error rendering ticket:', e);
-                }
-            }
 
             // Add CSS animation
             const style = document.createElement('style');

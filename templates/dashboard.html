@@ -390,6 +390,22 @@
             color: #60a5fa;
         }
 
+        .unread-dot {
+            width: 7px;
+            height: 7px;
+            background: #ef4444;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+            animation: pulse 2s infinite;
+            vertical-align: middle;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
         /* ===== PAGINATION ===== */
         .pagination {
             display: flex;
@@ -732,6 +748,7 @@
                         <tr>
                             <td>
                                 <a href="/ticket/{{ ticket.ticket_id }}">
+                                    {% if ticket.has_unread_notification or ticket.has_unread_reply %}<span class="unread-dot"></span>{% endif %}
                                     #{{ ticket.ticket_id }}
                                 </a>
                             </td>
@@ -980,7 +997,7 @@
                     else if (ticket.priority === 'Low') { priorityIcon = '🐢'; priorityClass = 'badge-low'; }
 
                     row.innerHTML = `
-                        <td><a href="/ticket/${ticket.ticket_id}">#${ticket.ticket_id}</a></td>
+                        <td><a href="/ticket/${ticket.ticket_id}"><span class="unread-dot"></span>#${ticket.ticket_id}</a></td>
                         <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis;">${ticket.subject || 'No Subject'}</td>
                         <td><span class="priority-badge badge-open">Open</span></td>
                         <td><span class="priority-badge ${priorityClass}">${priorityIcon} ${ticket.priority || 'Medium'}</span></td>
