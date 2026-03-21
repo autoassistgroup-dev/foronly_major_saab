@@ -29,8 +29,36 @@ def _is_admin_role(role):
         return False
     return str(role).strip().lower() in ('administrator', 'admin')
 
-# Create blueprint
 main_bp = Blueprint('main', __name__)
+
+@main_bp.route('/api/test_db_direct')
+def test_db_direct():
+    try:
+        from database import get_db
+        db = get_db()
+        import traceback
+        
+        output = "=== DATABASE DEBUG INFO ===\n\n"
+        output += f"Total tickets in DB: {db.tickets.count_documents({})}\n\n"
+        
+        output += "Testing database method get_tickets_with_assignments:\n"
+        try:
+            # Call the actual method that is failing
+            tickets = db.get_tickets_with_assignments(page=1, per_page=10)
+            output += f"Method returned a list of length: {len(tickets)}\n\n"
+            if len(tickets) > 0:
+                output += f"First ticket ID: {tickets[0].get('ticket_id')}\n"
+            
+            if hasattr(db, "last_error") and db.last_error:
+                output += f"Method failed internally with error:\n{db.last_error}\n"
+        except Exception as e:
+            output += f"Method raised exception:\n{str(e)}\n{traceback.format_exc()}\n\n"
+            
+        return f"<pre>{output}</pre>"
+        
+    except Exception as e:
+        import traceback
+        return f"<pre>Fatal API error:\n{str(e)}\n{traceback.format_exc()}</pre>"
 
 import uuid
 from werkzeug.security import generate_password_hash
