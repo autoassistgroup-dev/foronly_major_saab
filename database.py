@@ -495,10 +495,13 @@ class MongoDB:
             return result
             
         except pymongo.errors.OperationFailure as e:
-            logging.error(f"[DATABASE] Failed to get tickets: {e}")
+            self.last_error = f"[DATABASE] Failed to get tickets (OperationFailure): {str(e)}\n{traceback.format_exc()}"
+            logging.error(self.last_error)
             return []
         except Exception as e:
-            logging.error(f"[DATABASE] Error getting tickets: {e}")
+            import traceback
+            self.last_error = f"[DATABASE] Error getting tickets (Exception): {str(e)}\n{traceback.format_exc()}"
+            logging.error(self.last_error)
             return []
     
     def get_tickets_count(self, status_filter=None, priority_filter=None, search_query=None, referred_only=False, exclude_ids=None):
