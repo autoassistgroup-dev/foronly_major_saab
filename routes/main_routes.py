@@ -398,6 +398,93 @@ def ticket_detail(ticket_id):
         return redirect(url_for('main.index'))
     
     # Mark ticket as viewed (clears has_unread_notification)
+
+@main_bp.route('/debug/db')
+def debug_db():
+    try:
+        from database import get_db
+        db = get_db()
+        import traceback
+        
+        output = "=== DATABASE DEBUG INFO ===\n\n"
+        output += f"Total tickets in DB: {db.tickets.count_documents({})}\n\n"
+        
+        output += "Testing get_tickets_with_assignments(page=1, per_page=10):\n"
+        try:
+            # We must monkeypatch the method temporarily to NOT catch exceptions
+            # or we can just copy the pipeline here to see the actual error
+            match_stage = {}
+            pipeline = []
+            if match_stage:
+                pipeline.append({"$match": match_stage})
+                
+            pipeline.append({"$addFields": {
+                "updated_at": {"$ifNull": ["$updated_at", "$created_at"]},
+                "has_unread_notification": {"$ifNull": ["$has_unread_notification", False]},
+                "has_unread_reply": {"$ifNull": ["$has_unread_reply", False]}
+            }})
+            pipeline.append({"$sort": {"has_unread_notification": -1, "updated_at": -1}})
+            pipeline.extend([{"$skip": 0}, {"$limit": 10}])
+            
+            pipeline.extend([
+                {
+                    "$lookup": {
+                        "from": "ticket_assignments",
+                        "localField": "ticket_id",
+                        "foreignField": "ticket_id",
+                        "as": "assignment"
+                    }
+                },
+                {
+                    "$addFields": {
+                        "assignment_member_id": {"$arrayElemAt": ["$assignment.member_id", 0]},
+                        "assignment_forwarded_from": {"$arrayElemAt": ["$assignment.forwarded_from", 0]}
+                    }
+                },
+                {
+                    "$lookup": {
+                        "from": "ticket_metadata",
+                        "localField": "ticket_id",
+                        "foreignField": "ticket_id",
+                        "as": "_tech_metadata"
+                    }
+                },
+                {
+                    "$addFields": {
+                        "technician_id": {
+                            "$let": {
+                                "vars": {
+                                    "tech_id_doc": {
+                                        "$arrayElemAt": [
+                                            {"$filter": {
+                                                "input": {"$ifNull": ["$_tech_metadata", []]},
+                                                "cond": {"$eq": ["$$this.key", "technician_id"]}
+                                            }}, 0
+                                        ]
+                                    }
+                                },
+                                "in": {"$ifNull": ["$$tech_id_doc.value", None]}
+                            }
+                        }
+                    }
+                }
+            ])
+            
+            result = list(db.tickets.aggregate(pipeline, allowDiskUse=True))
+            output += f"SUCCESS! Pipeline returned {len(result)} tickets.\n\n"
+            if result:
+                output += f"Sample Ticket subject: {result[0].get('subject')}\n"
+                output += f"Sample tech ID: {result[0].get('technician_id')}\n"
+                
+        except Exception as e:
+            output += f"PIPELINE CRASHED:\n{str(e)}\n{traceback.format_exc()}\n\n"
+            
+        return f"<pre>{output}</pre>"
+        
+    except Exception as e:
+        import traceback
+        return f"<pre>Fatal API error:\n{str(e)}\n{traceback.format_exc()}</pre>"
+
     db.mark_ticket_viewed(ticket_id)
     
     # Sanitize ticket for template (n8n/API tickets may have None or malformed fields)
