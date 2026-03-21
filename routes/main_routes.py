@@ -398,35 +398,6 @@ def ticket_detail(ticket_id):
         return redirect(url_for('main.index'))
     
     # Mark ticket as viewed (clears has_unread_notification)
-
-@main_bp.route('/debug/db')
-def debug_db():
-    try:
-        from database import get_db
-        db = get_db()
-        import traceback
-        
-        output = "=== DATABASE DEBUG INFO ===\n\n"
-        output += f"Total tickets in DB: {db.tickets.count_documents({})}\n\n"
-        
-        output += "Testing database method get_tickets_with_assignments:\n"
-        try:
-            # Call the actual method that is failing
-            tickets = db.get_tickets_with_assignments(page=1, per_page=10)
-            output += f"Method returned a list of length: {len(tickets)}\n\n"
-            if len(tickets) > 0:
-                output += f"First ticket ID: {tickets[0].get('ticket_id')}\n"
-            elif hasattr(db, "last_error") and db.last_error:
-                output += f"Method failed internally with error:\n{db.last_error}\n"
-        except Exception as e:
-            output += f"Method raised exception:\n{str(e)}\n{traceback.format_exc()}\n\n"
-            
-        return f"<pre>{output}</pre>"
-        
-    except Exception as e:
-        import traceback
-        return f"<pre>Fatal API error:\n{str(e)}\n{traceback.format_exc()}</pre>"
-
     db.mark_ticket_viewed(ticket_id)
     
     # Sanitize ticket for template (n8n/API tickets may have None or malformed fields)
