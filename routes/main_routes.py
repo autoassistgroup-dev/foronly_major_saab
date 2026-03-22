@@ -75,8 +75,9 @@ def _sanitize_ticket_for_template(ticket):
     out = dict(ticket)
     out.pop('raw_data', None)  # avoid passing large/non-serializable n8n payload to template
     out['subject'] = out.get('subject') or 'No Subject'
-    out['body'] = out.get('body') or out.get('message') or ''
-    out['message'] = out.get('message') or out.get('body') or ''
+    out['body'] = out.get('body') or out.get('message') or out.get('description') or ''
+    out['message'] = out.get('message') or out.get('body') or out.get('description') or ''
+    out['description'] = out.get('description') or out.get('body') or out.get('message') or ''
     out['draft_body'] = out.get('draft_body') or out.get('n8n_draft') or out.get('draft') or ''
     atts = out.get('attachments')
     if not isinstance(atts, list):
