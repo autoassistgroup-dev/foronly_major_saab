@@ -680,12 +680,20 @@
         .ticket-table .unread-dot {
             width: 7px;
             height: 7px;
-            background: #ef4444;
+            background: #ef4444; /* Red for unread replies */
             border-radius: 50%;
             display: inline-block;
             margin-right: 6px;
             animation: pulse 2s infinite;
             vertical-align: middle;
+        }
+
+        .ticket-table .unread-dot-yellow {
+            background: #f59e0b !important; /* Yellow for new tickets */
+        }
+
+        .ticket-table .unread-dot-green {
+            background: #10b981 !important; /* Green for forwarded tickets */
         }
 
         .ticket-table .returned-badge {
@@ -798,6 +806,10 @@
             margin-top: 6px;
             flex-shrink: 0;
             animation: pulse 2s infinite;
+        }
+
+        .unread-indicator.unread-dot-green {
+            background: #10b981 !important;
         }
 
         @keyframes pulse {
@@ -1422,7 +1434,7 @@
                     <a href="/ticket/{{ ticket.ticket_id }}">
                         <!-- Unread indicator for unviewed forwarded tickets -->
                         {% if not ticket.is_forwarded_viewed %}
-                        <div class="unread-indicator"></div>
+                        <div class="unread-indicator unread-dot-green" title="New Forwarded Ticket"></div>
                         {% endif %}
 
                         <div class="ticket-content">
@@ -1542,7 +1554,11 @@
                         {% for ticket in tickets %}
                         <tr class="ticket-card" onclick="window.location='/ticket/{{ ticket.ticket_id }}'">
                             <td class="td-id">
-                                {% if ticket.has_unread_notification or ticket.has_unread_reply %}<span class="unread-dot"></span>{% endif %}
+                                {% if ticket.has_unread_notification or ticket.has_unread_reply %}
+                                    <span class="unread-dot" title="New Reply"></span>
+                                {% elif ticket.status == 'New' %}
+                                    <span class="unread-dot unread-dot-yellow" title="New Ticket Created"></span>
+                                {% endif %}
                                 #{{ ticket.ticket_id }}
                                 {% if ticket.is_important %}<i class="fas fa-star star-indicator"></i>{% endif %}
                             </td>
@@ -1901,7 +1917,12 @@
                         : status === 'Resolved' ? 'status-resolved' : 'status-new';
 
             const hasNew = !!(t.has_new_reply || t.has_unread_reply);
-            const unreadDot = hasNew ? '<span class="unread-dot"></span>' : '';
+            let unreadDot = '';
+            if (hasNew) {
+                unreadDot = '<span class="unread-dot" title="New Reply"></span>';
+            } else if (status === 'New') {
+                unreadDot = '<span class="unread-dot unread-dot-yellow" title="New Ticket Created"></span>';
+            }
             const starHtml = t.is_bookmarked ? '<i class="fas fa-star star-indicator"></i>' : '';
 
             // Technician
