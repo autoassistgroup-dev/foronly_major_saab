@@ -295,6 +295,9 @@ def api_index_tickets():
             'classification': ticket.get('classification'),
             'is_forwarded': bool(ticket.get('is_forwarded')),
             'is_forwarded_viewed': bool(ticket.get('is_forwarded_viewed')),
+            'is_new_viewed': bool(ticket.get('is_new_viewed', True)),  # Default True if missing
+            'has_unread_notification': bool(ticket.get('has_unread_notification', False)),
+            'referred_back_by_name': ticket.get('referred_back_by_name'),
             'forwarded_to_name': forwarded_to_name,
             'assigned_technician_name': ticket.get('assigned_technician') or ticket.get('technician_name') or '',
             'is_bookmarked': bool(ticket.get('is_important')),

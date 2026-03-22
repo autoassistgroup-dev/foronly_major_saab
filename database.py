@@ -536,7 +536,8 @@ class MongoDB:
                 {"ticket_id": ticket_id},
                 {"$set": {
                     "has_unread_notification": False,
-                    "has_unread_reply": False
+                    "has_unread_reply": False,
+                    "is_new_viewed": True
                 }}
             )
             return True
@@ -994,6 +995,8 @@ class MongoDB:
             ticket_data.setdefault('status', 'Open')
             ticket_data.setdefault('is_important', False)
             ticket_data.setdefault('has_unread_reply', False)
+            ticket_data.setdefault('is_new_viewed', False)
+            ticket_data.setdefault('has_unread_notification', True)
             
             result = self.tickets.insert_one(ticket_data)
             return result.inserted_id

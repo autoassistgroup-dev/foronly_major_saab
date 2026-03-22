@@ -696,6 +696,37 @@
             background: #10b981 !important; /* Green for forwarded tickets */
         }
 
+        /* Ticket Highlights */
+        .ticket-highlight-new {
+            background: rgba(245, 158, 11, 0.08) !important;
+            box-shadow: inset 4px 0 0 #f59e0b !important;
+        }
+
+        .ticket-highlight-returned {
+            background: rgba(96, 165, 250, 0.08) !important;
+            box-shadow: inset 4px 0 0 #60a5fa !important;
+        }
+
+        .ticket-highlight-forwarded {
+            background: rgba(16, 185, 129, 0.08) !important;
+            box-shadow: inset 4px 0 0 #10b981 !important;
+        }
+
+        .highlight-badge {
+            font-size: 8px;
+            font-weight: 800;
+            padding: 1px 4px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            margin-left: 5px;
+            vertical-align: middle;
+            display: inline-block;
+        }
+
+        .badge-new { background: #f59e0b; color: #000; }
+        .badge-returned { background: #60a5fa; color: #fff; }
+        .badge-forwarded-highlight { background: #10b981; color: #fff; }
+
         .ticket-table .returned-badge {
             display: inline-flex;
             align-items: center;
@@ -1552,14 +1583,21 @@
                     </thead>
                     <tbody id="ticketTableBody">
                         {% for ticket in tickets %}
-                        <tr class="ticket-card" onclick="window.location='/ticket/{{ ticket.ticket_id }}'">
+                        <tr class="ticket-card 
+                            {% if not ticket.is_new_viewed %}ticket-highlight-new
+                            {% elif ticket.referred_back_by_name %}ticket-highlight-returned
+                            {% elif ticket.is_forwarded %}ticket-highlight-forwarded{% endif %}" 
+                            onclick="window.location='/ticket/{{ ticket.ticket_id }}'">
                             <td class="td-id">
                                 {% if ticket.has_unread_notification or ticket.has_unread_reply %}
                                     <span class="unread-dot" title="New Reply"></span>
-                                {% elif ticket.status == 'New' %}
+                                {% elif not ticket.is_new_viewed %}
                                     <span class="unread-dot unread-dot-yellow" title="New Ticket Created"></span>
                                 {% endif %}
                                 #{{ ticket.ticket_id }}
+                                {% if not ticket.is_new_viewed %}<span class="highlight-badge badge-new">NEW</span>{% endif %}
+                                {% if ticket.referred_back_by_name %}<span class="highlight-badge badge-returned">RETURNED</span>{% endif %}
+                                {% if ticket.is_forwarded %}<span class="highlight-badge badge-forwarded-highlight">FORWARDED</span>{% endif %}
                                 {% if ticket.is_important %}<i class="fas fa-star star-indicator"></i>{% endif %}
                             </td>
                             <td class="td-priority">
@@ -1916,45 +1954,32 @@
                     : status === 'Closed' ? 'status-closed'
                         : status === 'Resolved' ? 'status-resolved' : 'status-new';
 
-            const hasNew = !!(t.has_new_reply || t.has_unread_reply);
-            let unreadDot = '';
-            if (hasNew) {
-                unreadDot = '<span class="unread-dot" title="New Reply"></span>';
-            } else if (status === 'New') {
-                unreadDot = '<span class="unread-dot unread-dot-yellow" title="New Ticket Created"></span>';
-            }
+            const isNew = !t.is_new_viewed;
+            const unreadDot = hasNew ? '<span class="unread-dot" title="New Reply"></span>' 
+                            : (isNew ? '<span class="unread-dot unread-dot-yellow" title="New Ticket Created"></span>' : '');
+            const isReturned = !!t.referred_back_by_name;
+            const isForwarded = !!t.is_forwarded;
+            
+            let highlightClass = '';
+            if (isNew) highlightClass = 'ticket-highlight-new';
+            else if (isReturned) highlightClass = 'ticket-highlight-returned';
+            else if (isForwarded) highlightClass = 'ticket-highlight-forwarded';
+            
+            let badgesHtml = '';
+            if (isNew) badgesHtml += '<span class="highlight-badge badge-new">NEW</span>';
+            if (isReturned) badgesHtml += '<span class="highlight-badge badge-returned">RETURNED</span>';
+            if (isForwarded) badgesHtml += '<span class="highlight-badge badge-forwarded-highlight">FORWARDED</span>';
+
             const starHtml = t.is_bookmarked ? '<i class="fas fa-star star-indicator"></i>' : '';
 
-            // Technician
-            let techHtml = '<span style="color: rgba(255,255,255,0.2);">—</span>';
-            if (t.assigned_technician_name) {
-                techHtml = `<i class="fas fa-wrench" style="font-size:10px;opacity:0.6;margin-right:5px;"></i>${escapeHtml(t.assigned_technician_name)}`;
-            }
-
-            // Takeover / Forwarded
-            let assignHtml = '<span style="color: rgba(255,255,255,0.2);">—</span>';
-            let parts = [];
-            if (t.assigned_member_name) {
-                parts.push(`<div><span class="assign-label">Takeover</span><span class="assign-name"><i class="fas fa-user-check" style="font-size:10px;opacity:0.6;margin-right:5px;"></i>${escapeHtml(t.assigned_member_name)}</span></div>`);
-            }
-            if (t.is_forwarded && t.forwarded_to_name) {
-                parts.push(`<div><span class="assign-label">Forwarded</span><span class="assign-name"><i class="fas fa-share" style="font-size:10px;opacity:0.6;margin-right:5px;transform:scaleX(-1);"></i>${escapeHtml(t.forwarded_to_name)}</span></div>`);
-            }
-            if (parts.length > 0) assignHtml = `<div class="assign-forwarded">${parts.join('')}</div>`;
-
-            // Format time
-            let timeStr = 'N/A';
-            const dateField = t.updated_at || t.created_at;
-            if (dateField) {
-                try {
-                    const d = new Date(dateField);
-                    timeStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ', ' +
-                        d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-                } catch (e) { timeStr = dateField; }
-            }
-
+            // Update row class
+            const rowId = `ticket-row-${ticketId}`;
+            // We can't update row class here easily because this function returns innerHTML
+            // But we'll handle it in the caller or by adding the class to the returned string
+            // Actually buildTicketCardHtml IS the innerHTML.
+            
             return `
-                <td class="td-id">${unreadDot}#${ticketId}${starHtml}</td>
+                <td class="td-id">${unreadDot}#${ticketId}${badgesHtml}${starHtml}</td>
                 <td class="td-priority"><span class="tbl-badge priority-badge ${priorityClass}">${priority}</span></td>
                 <td class="td-status"><span class="tbl-badge status-badge badge-status ${statusClass}">${status}</span></td>
                 <td class="td-subject">
@@ -1973,6 +1998,12 @@
          * Patch an existing card's badges/status in-place (no DOM rebuild).
          */
         function patchTicketCard(row, ticket) {
+            // Update row highlight classes
+            row.classList.remove('ticket-highlight-new', 'ticket-highlight-returned', 'ticket-highlight-forwarded');
+            if (!ticket.is_new_viewed) row.classList.add('ticket-highlight-new');
+            else if (ticket.referred_back_by_name) row.classList.add('ticket-highlight-returned');
+            else if (ticket.is_forwarded) row.classList.add('ticket-highlight-forwarded');
+
             // Priority
             const priorityBadge = row.querySelector('.priority-badge');
             if (priorityBadge && ticket.priority) {
@@ -1991,36 +2022,35 @@
                 statusBadge.textContent = s;
             }
 
-            // Unread dot
+            // ID Cell (rebuild for dots/badges/star consistency)
             const idCell = row.querySelector('.td-id');
             if (idCell) {
-                const existingDot = idCell.querySelector('.unread-dot');
+                const status = ticket.status || 'New';
                 const hasNew = !!(ticket.has_new_reply || ticket.has_unread_reply);
-                if (hasNew && !existingDot) {
-                    const dot = document.createElement('span');
-                    dot.className = 'unread-dot';
-                    idCell.prepend(dot);
-                } else if (!hasNew && existingDot) {
-                    existingDot.remove();
-                }
-            }
+                const unreadDot = hasNew ? '<span class="unread-dot" title="New Reply"></span>' 
+                                : (status === 'New' ? '<span class="unread-dot unread-dot-yellow" title="New Ticket Created"></span>' : '');
+                
+                const isNew = !ticket.is_new_viewed;
+                const isReturned = !!ticket.referred_back_by_name;
+                const isForwarded = !!ticket.is_forwarded;
+                
+                let badgesHtml = '';
+                if (isNew) badgesHtml += '<span class="highlight-badge badge-new">NEW</span>';
+                if (isReturned) badgesHtml += '<span class="highlight-badge badge-returned">RETURNED</span>';
+                if (isForwarded) badgesHtml += '<span class="highlight-badge badge-forwarded-highlight">FORWARDED</span>';
 
-            // Star
-            if (idCell) {
-                const existingStar = idCell.querySelector('.star-indicator');
-                if (ticket.is_bookmarked && !existingStar) {
-                    const star = document.createElement('i');
-                    star.className = 'fas fa-star star-indicator';
-                    idCell.appendChild(star);
-                } else if (!ticket.is_bookmarked && existingStar) {
-                    existingStar.remove();
-                }
+                const starHtml = ticket.is_bookmarked ? '<i class="fas fa-star star-indicator"></i>' : '';
+                idCell.innerHTML = `${unreadDot}#${ticket.ticket_id}${badgesHtml}${starHtml}`;
             }
 
             // Technician
             const techCell = row.querySelector('.td-tech');
-            if (techCell && ticket.assigned_technician_name) {
-                techCell.innerHTML = `<i class="fas fa-wrench" style="font-size:10px;opacity:0.6;margin-right:5px;"></i>${escapeHtml(ticket.assigned_technician_name)}`;
+            if (techCell) {
+                if (ticket.assigned_technician_name) {
+                    techCell.innerHTML = `<i class="fas fa-wrench" style="font-size:10px;opacity:0.6;margin-right:5px;"></i>${escapeHtml(ticket.assigned_technician_name)}`;
+                } else {
+                    techCell.innerHTML = '<span style="color: rgba(255,255,255,0.2);">—</span>';
+                }
             }
         }
 
@@ -2070,7 +2100,12 @@
                         patchTicketCard(row, ticket);
                     } else {
                         row = document.createElement('tr');
-                        row.className = 'ticket-card';
+                        const isNew = !ticket.is_new_viewed;
+                        const isReturned = !!ticket.referred_back_by_name;
+                        const isForwarded = !!ticket.is_forwarded;
+                        let highlightClass = isNew ? 'ticket-highlight-new' : (isReturned ? 'ticket-highlight-returned' : (isForwarded ? 'ticket-highlight-forwarded' : ''));
+                        
+                        row.className = `ticket-card ${highlightClass}`;
                         row.setAttribute('onclick', `window.location='/ticket/${id}'`);
                         row.innerHTML = buildTicketCardHtml(ticket);
                         row.style.animation = 'fadeSlideIn 0.4s ease-out';

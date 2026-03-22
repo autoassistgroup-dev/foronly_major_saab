@@ -122,7 +122,10 @@ def get_email_template(template_type, ticket_id):
         
         # Determine subject
         original_subject = ticket.get('subject', 'Support Request')
-        # Remove "Re:" prefix logic as requested - use original subject directly or with template context
+        # Remove "Re:" prefix as requested by user
+        if original_subject.upper().startswith('RE:'):
+            original_subject = original_subject[3:].strip()
+            
         subject = f"{original_subject} [TID: {ticket_id}]"
             
         # Check for existing draft
