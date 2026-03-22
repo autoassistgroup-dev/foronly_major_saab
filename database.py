@@ -109,13 +109,13 @@ class MongoDB:
                 logging.warning("certifi not installed, SSL certificate verification may fail")
             
             connection_options = {
-                # PERFORMANCE: Reduced timeouts for fast-fail on DNS/network issues
+                # PERFORMANCE: Serverless optimized connection pool
                 'maxPoolSize': 10,
-                'minPoolSize': 1,
-                'maxIdleTimeMS': 45000,
-                'serverSelectionTimeoutMS': 5000,   # 5 seconds (was 30s!) - fast-fail on DNS issues
-                'connectTimeoutMS': 5000,            # 5 seconds (was 30s!) - fast-fail
-                'socketTimeoutMS': 10000,             # 10 seconds (was 60s!) - prevent long hangs
+                'minPoolSize': 0,                     # MUST be 0 for Serverless to prevent zombie connections
+                'maxIdleTimeMS': 10000,               # Aggressive pool cleanup (10s)
+                'serverSelectionTimeoutMS': 5000,     # Fast-fail on DNS issues
+                'connectTimeoutMS': 10000,            # 10s network connect
+                'socketTimeoutMS': 45000,             # 45s socket limit (let Vercel govern overall timeout)
                 'heartbeatFrequencyMS': 30000,        # 30 seconds
                 'retryWrites': True,
                 'retryReads': True,
