@@ -392,7 +392,7 @@ def dashboard():
     # Get base data
     tickets = db.get_tickets_with_assignments(page=1, per_page=50, referred_only=is_tech_director)
     members = db.get_all_members()
-    technicians = list(db.technicians.find({"is_active": True}))
+    technicians = db.get_all_technicians()
     ticket_statuses = list(db.ticket_statuses.find({"is_active": True}).sort("order", 1))
     
     # Optimized Dashboard Stats (using ticket stats instead of warranty claims)
@@ -468,9 +468,33 @@ def ticket_detail(ticket_id):
             # Update local object for this render
             ticket['is_forwarded_viewed'] = True
     
-    replies = db.get_replies_by_ticket(ticket_id)
-    # Sanitize each reply for template consistency
-    replies = [_sanitize_reply_for_template(r) for r in replies]
+    # 🚀 MERGE: Get replies from both the "replies" collection AND the "ticket['replies']" array (from n8n)
+    replies_col = db.get_replies_by_ticket(ticket_id) or []
+    replies_array = ticket.get('replies', [])
+    
+    # Combined and deduplicated (using message ID or timestamp if available, but simple append + sort is usually enough here)
+    combined_replies = []
+    seen_reply_content = set() # Optional simple deduplication
+    
+    # Process collection replies first
+    for r in replies_col:
+        sanitized = _sanitize_reply_for_template(r)
+        # Create a unique key for deduplication if needed
+        content_key = f"{sanitized.get('created_at')}_{len(sanitized.get('message', ''))}"
+        combined_replies.append(sanitized)
+        seen_reply_content.add(content_key)
+        
+    # Process array replies (from n8n/webhooks)
+    for r in replies_array:
+        sanitized = _sanitize_reply_for_template(r)
+        content_key = f"{sanitized.get('created_at')}_{len(sanitized.get('message', ''))}"
+        if content_key not in seen_reply_content:
+            combined_replies.append(sanitized)
+            seen_reply_content.add(content_key)
+            
+    # Sort by created_at
+    combined_replies.sort(key=lambda x: x.get('created_at') or datetime.min)
+    replies = combined_replies
     members = db.get_all_members()
     technicians = db.get_all_technicians()
     ticket_statuses = list(db.ticket_statuses.find({"is_active": True}).sort("order", 1))

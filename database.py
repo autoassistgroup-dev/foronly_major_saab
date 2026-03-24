@@ -427,6 +427,8 @@ class MongoDB:
                 t["updated_at"] = t.get("updated_at") or t.get("created_at")
                 t["has_unread_notification"] = bool(t.get("has_unread_notification", False))
                 t["has_unread_reply"] = bool(t.get("has_unread_reply", False))
+                t["is_new_viewed"] = bool(t.get("is_new_viewed", False))
+                t["is_returned_viewed"] = bool(t.get("is_returned_viewed", False))
                 
                 # Get assignment from map
                 assignment = assignments_map.get(t_id, {})
@@ -1693,13 +1695,14 @@ class MongoDB:
     # Technician Management Methods
     def get_all_technicians(self):
         """Get all active technicians with in-memory caching"""
-        cached = self._cache_get('all_technicians')
+        cache_key = 'all_technicians'
+        cached = self._cache_get(cache_key)
         if cached is not None:
             return cached
-        
+            
         try:
             result = list(self.technicians.find({"is_active": True}).sort("name", 1))
-            self._cache_set('all_technicians', result, self._CACHE_TTL['all_technicians'])
+            self._cache_set(cache_key, result, self._CACHE_TTL.get('member', 300)) # Use member TTL or default 5m
             return result
         except pymongo.errors.OperationFailure as e:
             logging.error(f"Failed to get technicians: {e}")

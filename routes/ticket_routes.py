@@ -172,21 +172,25 @@ def create_ticket_webhook():
                 message_text = processed.get('body') or processed.get('message') or processed.get('description', '')
                 if message_text:
                     import uuid
-                    reply = {
-                        'id': str(uuid.uuid4()),
-                        'text': message_text,
-                        'sender': 'customer' if processed.get('email') == existing_ticket.get('email') else 'system',
-                        'timestamp': datetime.now(),
+                    # UNIFIED STORAGE: Create reply in the "replies" collection!
+                    reply_data = {
+                        'ticket_id': existing_ticket.get('ticket_id'),
+                        'message': message_text,
                         'message_id': processed.get('message_id', ''),
+                        'sender_name': processed.get('name', 'Customer'),
+                        'sender_type': 'customer' if processed.get('email') == existing_ticket.get('email') else 'system',
                         'attachments': processed.get('attachments', []),
                         'draft': processed.get('draft', ''),
-                        'n8n_draft': processed.get('n8n_draft', '')
+                        'n8n_draft': processed.get('n8n_draft', ''),
+                        'id': str(uuid.uuid4())
                     }
                     
-                    # Add reply to the replies array
+                    db.create_reply(reply_data)
+                    
+                    # Update the ticket's metadata as well
                     db.tickets.update_one(
                         {"_id": existing_ticket["_id"]},
-                        {"$push": {"replies": reply}, "$set": {"updated_at": datetime.now(), "has_unread_reply": True, "status": "Open"}}
+                        {"$set": {"updated_at": datetime.now(), "has_unread_reply": True, "status": "Open"}}
                     )
                     
                     # Emit new reply event
@@ -194,7 +198,7 @@ def create_ticket_webhook():
                         from socket_events import emit_new_reply
                         emit_new_reply({
                             'ticket_id': existing_ticket.get('ticket_id'),
-                            'reply': reply
+                            'reply': reply_data
                         })
                     except Exception as ev_err:
                         logger.warning(f"Failed to emit new reply event: {ev_err}")
