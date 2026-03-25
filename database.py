@@ -109,13 +109,13 @@ class MongoDB:
                 logging.warning("certifi not installed, SSL certificate verification may fail")
             
             connection_options = {
-                # PERFORMANCE: Serverless optimized connection pool
-                'maxPoolSize': 10,
-                'minPoolSize': 0,                     # MUST be 0 for Serverless to prevent zombie connections
+                # PERFORMANCE: Serverless optimized - minimal pool, fast timeouts
+                'maxPoolSize': 5,                     # Smaller pool for serverless
+                'minPoolSize': 0,                     # MUST be 0 for Serverless
                 'maxIdleTimeMS': 10000,               # Aggressive pool cleanup (10s)
-                'serverSelectionTimeoutMS': 5000,     # Fast-fail on DNS issues
-                'connectTimeoutMS': 10000,            # 10s network connect
-                'socketTimeoutMS': 45000,             # 45s socket limit (let Vercel govern overall timeout)
+                'serverSelectionTimeoutMS': 3000,     # 3s fast-fail on DNS issues
+                'connectTimeoutMS': 5000,             # 5s network connect (was 10s)
+                'socketTimeoutMS': 30000,             # 30s socket limit
                 'heartbeatFrequencyMS': 30000,        # 30 seconds
                 'retryWrites': True,
                 'retryReads': True,
@@ -179,9 +179,13 @@ class MongoDB:
                 logging.info("[DATABASE] First-time setup: creating indexes...")
                 self._create_all_indexes()
                 logging.info("[DATABASE] Index creation complete")
-            
-            # Seed default data (cheap find_one checks, only inserts on first deploy)
-            self._seed_default_data()
+                # Only seed data on first-time setup (when indexes don't exist)
+                self._seed_default_data()
+            else:
+                # Quick admin check — only seed if admin is missing (very rare)
+                admin_exists = self.members.find_one({"user_id": "admin001"}, {"_id": 1})
+                if not admin_exists:
+                    self._seed_default_data()
                 
         except pymongo.errors.DuplicateKeyError:
             pass
@@ -2587,19 +2591,15 @@ db = None
 technician_assignments = {}
 
 def get_db():
-    """Get database instance with connection health check and auto-reconnect."""
+    """Get database instance. On serverless (Vercel), the global persists within
+    the same function instance so we only create MongoDB once per cold start.
+    No per-request ping — let operations fail and reconnect lazily."""
     global db
     try:
         if db is None:
             db = MongoDB()
-        else:
-            # Lightweight ping to verify connection is alive
-            try:
-                db.client.admin.command('ping')
-            except Exception:
-                logging.warning("[DATABASE] Connection lost, reconnecting...")
-                db = MongoDB()
         return db
     except Exception as e:
         logging.error(f"Failed to get database connection: {e}")
+        db = None  # Reset so next call retries
         raise
