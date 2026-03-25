@@ -345,6 +345,7 @@ def api_index_tickets():
             forwarded_tickets = [t for t in forwarded_tickets if t.get('priority') == priority_filter]
         tickets = forwarded_tickets
         regular_tickets = []
+        total_count = len(forwarded_tickets)
     else:
         # Tickets forwarded TO this user, excluding Closed (actioned) ones
         if current_member_id:
@@ -364,12 +365,21 @@ def api_index_tickets():
             exclude_ids=forwarded_ids
         )
         tickets = forwarded_tickets + regular_tickets
+        # Get accurate total count for pagination display
+        total_count = db.get_tickets_count(
+            status_filter=status_filter if status_filter != 'All' else None,
+            priority_filter=priority_filter if priority_filter != 'All' else None,
+            search_query=search_query if search_query else None,
+            referred_only=False,
+            exclude_ids=forwarded_ids
+        ) + len(forwarded_tickets)
 
     return jsonify({
         'success': True,
         'tickets': [serialize_ticket(t) for t in tickets],
         'forwarded_tickets': [serialize_ticket(t) for t in forwarded_tickets],
         'regular_tickets': [serialize_ticket(t) for t in regular_tickets],
+        'total_count': total_count,
     })
 
 

@@ -38,7 +38,7 @@ class Config:
     SESSION_COOKIE_SECURE = False  # Set to True only in production with HTTPS
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
-    SESSION_REFRESH_EACH_REQUEST = True
+    SESSION_REFRESH_EACH_REQUEST = False  # PERFORMANCE: Custom refresh_session() handles this
     PERMANENT_SESSION_LIFETIME = timedelta(days=30)
     SESSION_COOKIE_MAX_AGE = 30 * 24 * 60 * 60  # 30 days in seconds
     

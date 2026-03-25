@@ -1920,7 +1920,10 @@
                 if (!res.ok) return null;
                 const data = await res.json();
                 if (!data.success) return null;
-                return data.tickets || [];
+                return {
+                    tickets: data.tickets || [],
+                    total_count: data.total_count != null ? data.total_count : (data.tickets || []).length
+                };
             } catch (e) {
                 console.warn('[REFRESH] Failed to fetch tickets', e);
                 return null;
@@ -2099,11 +2102,22 @@
             if (_refreshInProgress) return;
             _refreshInProgress = true;
             try {
-                const tickets = await fetchIndexTicketsForHome();
-                if (!tickets) return;
+                const result = await fetchIndexTicketsForHome();
+                if (!result) return;
+
+                const tickets = result.tickets;
+                const totalCount = result.total_count;
 
                 const tbody = document.getElementById('ticketTableBody');
                 if (!tbody) return;
+
+                // CRITICAL FIX: If API returns 0 tickets but there are existing rows,
+                // skip the refresh — the API likely had a transient error.
+                const existingRowCount = tbody.querySelectorAll('tr.ticket-card').length;
+                if (tickets.length === 0 && existingRowCount > 0) {
+                    console.warn('[REFRESH] API returned 0 tickets but table has', existingRowCount, 'rows — skipping refresh to prevent data loss');
+                    return;
+                }
 
                 // Build map of existing DOM rows by ticket_id
                 const existingCards = new Map();
@@ -2159,16 +2173,18 @@
                     prevSibling = row;
                 }
 
-                // 3. Update total count
+                // 3. Update total count using server-provided total_count
                 const totalBadge = document.querySelector('.total-badge');
                 if (totalBadge) {
-                    totalBadge.textContent = `Total: ${tickets.length}`;
+                    totalBadge.textContent = `Total: ${totalCount}`;
                 }
 
-                // Remove empty state if tickets exist
+                // Handle empty state display
+                const emptyStateEl = document.querySelector('.ticket-table-empty');
                 if (tickets.length > 0) {
-                    const emptyState = tbody.querySelector('.empty-state');
-                    if (emptyState) emptyState.remove();
+                    if (emptyStateEl) emptyStateEl.style.display = 'none';
+                } else {
+                    if (emptyStateEl) emptyStateEl.style.display = '';
                 }
 
             } catch (e) {

@@ -498,7 +498,13 @@ class MongoDB:
         """
         Get efficient aggregated statistics for tickets.
         Performance Optimized: Uses server-side aggregation instead of loading all docs.
+        PERFORMANCE: Cached for 30 seconds to avoid redundant aggregation on rapid reloads.
         """
+        # Check cache first
+        cached = self._cache_get('ticket_stats')
+        if cached is not None:
+            return cached
+        
         try:
             pipeline = [
                 {
@@ -548,6 +554,8 @@ class MongoDB:
                     default_classifications[c] = count
             formatted_stats["classifications"] = default_classifications
             
+            # Cache for 30 seconds to reduce DB load on rapid reloads
+            self._cache_set('ticket_stats', formatted_stats, 30)
             return formatted_stats
             
         except Exception as e:
@@ -1570,47 +1578,22 @@ class MongoDB:
             logging.error(f"Failed to get deleted tickets: {e}")
             return []
 
-    def get_dashboard_stats(self):
-        """Get statistics for dashboard"""
-        try:
-            total_tickets = self.tickets.count_documents({})
-            
-            # Status counts
-            status_pipeline = [
-                {"$group": {"_id": "$status", "count": {"$sum": 1}}}
-            ]
-            status_counts = {item["_id"]: item["count"] for item in self.tickets.aggregate(status_pipeline)}
-            
-            # Priority counts
-            priority_pipeline = [
-                {"$group": {"_id": "$priority", "count": {"$sum": 1}}}
-            ]
-            priority_counts = {item["_id"]: item["count"] for item in self.tickets.aggregate(priority_pipeline)}
-            
-            # Classification counts
-            classification_pipeline = [
-                {"$group": {"_id": "$classification", "count": {"$sum": 1}}}
-            ]
-            classification_counts = {item["_id"]: item["count"] for item in self.tickets.aggregate(classification_pipeline)}
-            
-            return {
-                "total_tickets": total_tickets,
-                "status_counts": status_counts,
-                "priority_counts": priority_counts,
-                "classification_counts": classification_counts
-            }
-        except pymongo.errors.OperationFailure as e:
-            logging.error(f"Failed to get dashboard stats: {e}")
-            return {"total_tickets": 0, "status_counts": {}, "priority_counts": {}, "classification_counts": {}}
-        except Exception as e:
-            logging.error(f"Unexpected error getting dashboard stats: {e}")
-            return {"total_tickets": 0, "status_counts": {}, "priority_counts": {}, "classification_counts": {}}
+    # NOTE: get_dashboard_stats() was removed — it was a duplicate of get_ticket_stats()
+    # that used 4 separate DB calls instead of 1 optimized $facet pipeline.
+    # Use get_ticket_stats() instead for all dashboard/stats needs.
 
     # Status Management Methods
     def get_all_ticket_statuses(self):
-        """Get all ticket statuses"""
+        """Get all active ticket statuses with caching.
+        PERFORMANCE: Cached for 5 minutes since statuses rarely change."""
+        cache_key = 'ticket_statuses'
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
+        
         try:
             statuses = list(self.ticket_statuses.find({'is_active': True}).sort('order', 1))
+            self._cache_set(cache_key, statuses, 300)  # Cache for 5 minutes
             return statuses
         except Exception as e:
             logging.error(f"Error getting ticket statuses: {e}")
@@ -1989,7 +1972,9 @@ class MongoDB:
             raise
     
     def get_all_common_documents(self):
-        """Get all common documents"""
+        """Get all common documents (metadata only, no file blobs).
+        PERFORMANCE: Excludes file_content and file_data to avoid fetching multi-MB blobs.
+        Use get_common_document_by_id() to get the actual file content for download."""
         try:
             result = list(self.common_documents.find({}, {
                 '_id': 1,
@@ -2004,9 +1989,9 @@ class MongoDB:
                 'download_count': 1,
                 'file_size': 1,
                 'file_type': 1,
-                'has_file_data': 1,
-                'file_content': 1,  # Include the actual file content
-                'file_data': 1      # Include the enhanced file data structure
+                'has_file_data': 1
+                # NOTE: file_content and file_data intentionally excluded for performance
+                # They are fetched individually via get_common_document_by_id()
             }).sort('created_at', -1))
             
             # Convert ObjectId to string for JSON serialization
@@ -2125,28 +2110,7 @@ class MongoDB:
         except Exception as e:
             logging.error(f"❌ Error updating system settings: {e}")
             return False
-        """Update a common document"""
-        try:
-            from bson.objectid import ObjectId
-            if not ObjectId.is_valid(document_id):
-                return False
-                
-            update_data['updated_at'] = datetime.now()
-            
-            result = self.common_documents.update_one(
-                {'_id': ObjectId(document_id)},
-                {'$set': update_data}
-            )
-            
-            if result.modified_count > 0:
-                logging.info(f"✅ Updated common document: {document_id}")
-                return True
-            else:
-                logging.warning(f"⚠️ No changes made to common document: {document_id}")
-                return False
-        except Exception as e:
-            logging.error(f"❌ Error updating common document {document_id}: {e}")
-            raise
+
     
     def delete_common_document(self, document_id):
         """Delete a common document"""
@@ -2167,31 +2131,7 @@ class MongoDB:
             logging.error(f"❌ Error deleting common document {document_id}: {e}")
             raise
     
-    def update_common_document(self, document_id, update_data):
-        """🚀 NEW: Update a common document with new data"""
-        try:
-            from bson.objectid import ObjectId
-            if not ObjectId.is_valid(document_id):
-                return False, "Invalid document ID format"
-            
-            # Add updated timestamp
-            update_data['updated_at'] = datetime.now()
-            
-            result = self.common_documents.update_one(
-                {'_id': ObjectId(document_id)},
-                {'$set': update_data}
-            )
-            
-            if result.modified_count > 0:
-                logging.info(f"✅ Successfully updated common document {document_id}")
-                return True, f"Updated {result.modified_count} document(s)"
-            else:
-                logging.warning(f"⚠️ No changes made to common document {document_id}")
-                return True, "No changes made"
-                
-        except Exception as e:
-            logging.error(f"❌ Error updating common document {document_id}: {e}")
-            return False, f"Update error: {str(e)}"
+
     
     def increment_document_download_count(self, document_id):
         """Increment download count for a document"""
@@ -2643,12 +2583,19 @@ db = None
 technician_assignments = {}
 
 def get_db():
-    """Get database instance with connection validation"""
+    """Get database instance with connection health check and auto-reconnect."""
     global db
     try:
         if db is None:
             db = MongoDB()
+        else:
+            # Lightweight ping to verify connection is alive
+            try:
+                db.client.admin.command('ping')
+            except Exception:
+                logging.warning("[DATABASE] Connection lost, reconnecting...")
+                db = MongoDB()
         return db
     except Exception as e:
         logging.error(f"Failed to get database connection: {e}")
-        raise 
+        raise

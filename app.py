@@ -70,6 +70,9 @@ def create_app(config_class=None):
     app.config['PERMANENT_SESSION_LIFETIME'] = config.PERMANENT_SESSION_LIFETIME
     app.config['MAX_CONTENT_LENGTH'] = config.MAX_CONTENT_LENGTH
     
+    # PERFORMANCE: Cache static files in browser for 12 hours (CSS, JS, images)
+    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 43200  # 12 hours in seconds
+    
     # Enable CORS
     CORS(app)
     
