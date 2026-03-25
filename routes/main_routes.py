@@ -128,6 +128,84 @@ def _sanitize_ticket_for_template(ticket):
     return out
 
 
+@main_bp.route('/api/debug/tickets')
+def api_debug_tickets():
+    """Temporary diagnostic endpoint to debug empty ticket list."""
+    if not is_authenticated():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    from database import get_db
+    import traceback
+    
+    debug_info = {}
+    
+    try:
+        db = get_db()
+        current_member = safe_member_lookup()
+        current_member_id = session.get('member_id')
+        is_tech_director = current_member.get('role') == 'Technical Director' if current_member else False
+        
+        debug_info['member_id'] = current_member_id
+        debug_info['member_role'] = current_member.get('role') if current_member else None
+        debug_info['is_tech_director'] = is_tech_director
+        
+        # 1. Raw ticket count
+        raw_count = db.tickets.count_documents({})
+        debug_info['raw_ticket_count'] = raw_count
+        
+        # 2. Get forwarded tickets info
+        if current_member_id:
+            forwarded_tickets = db.get_forwarded_tickets_to_user(current_member_id)
+            forwarded_non_closed = [t for t in forwarded_tickets if t.get('status') != 'Closed']
+            forwarded_ids = [t['ticket_id'] for t in forwarded_non_closed]
+            debug_info['forwarded_total'] = len(forwarded_tickets)
+            debug_info['forwarded_non_closed'] = len(forwarded_non_closed)
+            debug_info['forwarded_ids'] = forwarded_ids
+        else:
+            forwarded_ids = []
+            debug_info['forwarded_total'] = 0
+            debug_info['forwarded_ids'] = []
+        
+        # 3. Try simple find with no filters
+        try:
+            simple_tickets = list(db.tickets.find({}).limit(3))
+            debug_info['simple_find_count'] = len(simple_tickets)
+            debug_info['simple_find_ids'] = [t.get('ticket_id') for t in simple_tickets]
+        except Exception as e:
+            debug_info['simple_find_error'] = str(e)
+        
+        # 4. Try find with exclude
+        try:
+            match_stage = {}
+            if forwarded_ids:
+                match_stage["ticket_id"] = {"$nin": forwarded_ids}
+            filtered_count = db.tickets.count_documents(match_stage)
+            debug_info['filtered_count_after_exclude'] = filtered_count
+        except Exception as e:
+            debug_info['filtered_count_error'] = str(e)
+        
+        # 5. Try the full get_tickets_with_assignments
+        try:
+            tickets = db.get_tickets_with_assignments(
+                page=1, per_page=5,
+                exclude_ids=forwarded_ids
+            )
+            debug_info['get_tickets_result_count'] = len(tickets)
+            debug_info['get_tickets_ids'] = [t.get('ticket_id') for t in tickets]
+        except Exception as e:
+            debug_info['get_tickets_error'] = str(e)
+            debug_info['get_tickets_traceback'] = traceback.format_exc()
+        
+        # 6. Check last_error on db
+        debug_info['db_last_error'] = getattr(db, 'last_error', None)
+        
+    except Exception as e:
+        debug_info['outer_error'] = str(e)
+        debug_info['outer_traceback'] = traceback.format_exc()
+    
+    return jsonify(debug_info)
+
+
 @main_bp.route('/')
 def home():
     """Root route - redirects based on authentication status."""
