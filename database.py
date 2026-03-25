@@ -170,17 +170,18 @@ class MongoDB:
         Reduces Vercel cold start from ~15s to ~1s.
         """
         try:
-            # FAST CHECK: If the core 'ticket_id_1' index exists, indexes are already set up.
-            # index_information() is a metadata-only call — no collection scan.
+            # FAST CHECK: Check for the newest critical index 'updated_at_-1'
+            # If it's missing, we need to run _create_all_indexes to ensure the DB is up to date.
             existing_indexes = self.tickets.index_information()
-            indexes_exist = 'ticket_id_1' in existing_indexes
+            indexes_exist = 'updated_at_-1' in existing_indexes
             
             if not indexes_exist:
-                logging.info("[DATABASE] First-time setup: creating indexes...")
+                logging.info("[DATABASE] Missing critical indexes: creating indexes...")
                 self._create_all_indexes()
                 logging.info("[DATABASE] Index creation complete")
-                # Only seed data on first-time setup (when indexes don't exist)
-                self._seed_default_data()
+                # Only seed data on first-time setup (when core indexes don't exist at all)
+                if 'ticket_id_1' not in existing_indexes:
+                    self._seed_default_data()
             else:
                 # Quick admin check — only seed if admin is missing (very rare)
                 admin_exists = self.members.find_one({"user_id": "admin001"}, {"_id": 1})
