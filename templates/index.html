@@ -2119,59 +2119,20 @@
                     return;
                 }
 
-                // Build map of existing DOM rows by ticket_id
-                const existingCards = new Map();
-                tbody.querySelectorAll('tr.ticket-card').forEach(row => {
-                    const onclick = row.getAttribute('onclick') || '';
-                    const match = onclick.match(/\/ticket\/([^'"]+)/);
-                    if (match) {
-                        existingCards.set(match[1], row);
-                    }
-                });
+                // 1. Build the complete HTML for all rows
+                const newRowsHtml = tickets.map(ticket => {
+                    const isNew = !ticket.is_new_viewed;
+                    const isReturned = !!ticket.referred_back_by_name && !ticket.is_returned_viewed;
+                    const isForwarded = !!ticket.is_forwarded && !ticket.is_forwarded_viewed;
+                    let highlightClass = isNew ? 'ticket-highlight-new' : (isReturned ? 'ticket-highlight-returned' : (isForwarded ? 'ticket-highlight-forwarded' : ''));
+                    
+                    return `<tr class="ticket-card ${highlightClass}" onclick="window.location='/ticket/${ticket.ticket_id}'" style="animation: fadeSlideIn 0.4s ease-out">
+                        ${buildTicketCardHtml(ticket)}
+                    </tr>`;
+                }).join('');
 
-                const apiTicketIds = new Set(tickets.map(t => t.ticket_id));
-
-                // 1. Remove rows that are no longer in the API response
-                existingCards.forEach((row, id) => {
-                    if (!apiTicketIds.has(id)) {
-                        row.style.transition = 'opacity 0.3s';
-                        row.style.opacity = '0';
-                        setTimeout(() => row.remove(), 300);
-                    }
-                });
-
-                // 2. Insert new rows and reorder existing ones
-                let prevSibling = null;
-                for (let i = 0; i < tickets.length; i++) {
-                    const ticket = tickets[i];
-                    const id = ticket.ticket_id;
-                    let row = existingCards.get(id);
-
-                    if (row) {
-                        patchTicketCard(row, ticket);
-                    } else {
-                        row = document.createElement('tr');
-                        const isNew = !ticket.is_new_viewed;
-                        const isReturned = !!ticket.referred_back_by_name && !ticket.is_returned_viewed;
-                        const isForwarded = !!ticket.is_forwarded && !ticket.is_forwarded_viewed;
-                        let highlightClass = isNew ? 'ticket-highlight-new' : (isReturned ? 'ticket-highlight-returned' : (isForwarded ? 'ticket-highlight-forwarded' : ''));
-                        
-                        row.className = `ticket-card ${highlightClass}`;
-                        row.setAttribute('onclick', `window.location='/ticket/${id}'`);
-                        row.innerHTML = buildTicketCardHtml(ticket);
-                        row.style.animation = 'fadeSlideIn 0.4s ease-out';
-                    }
-
-                    const expectedNext = prevSibling ? prevSibling.nextElementSibling : tbody.firstElementChild;
-                    if (row !== expectedNext) {
-                        if (prevSibling) {
-                            prevSibling.after(row);
-                        } else {
-                            tbody.prepend(row);
-                        }
-                    }
-                    prevSibling = row;
-                }
+                // 2. Safely replace the entire table body content at once
+                tbody.innerHTML = newRowsHtml;
 
                 // 3. Update total count using server-provided total_count
                 const totalBadge = document.querySelector('.total-badge');

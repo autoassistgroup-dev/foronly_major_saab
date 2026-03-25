@@ -402,6 +402,9 @@ class MongoDB:
             assignments_map = {a.get("ticket_id"): a for a in assignments_list}
             
             # 2. Collect all member IDs needed (assigned_member, forwarded_from, forwarded_to)
+            from bson.objectid import ObjectId
+            from bson.errors import InvalidId
+            
             member_ids = set()
             for t in tickets:
                 a = assignments_map.get(t.get("ticket_id"), {})
@@ -409,8 +412,22 @@ class MongoDB:
                 if a.get("forwarded_from"): member_ids.add(a.get("forwarded_from"))
                 if t.get("forwarded_to"): member_ids.add(t.get("forwarded_to"))
             
+            # Safely cast all valid IDs to ObjectId to prevent InvalidId crashes
+            valid_member_ids = []
+            for mid in member_ids:
+                if not mid: continue
+                if isinstance(mid, ObjectId):
+                    valid_member_ids.append(mid)
+                elif isinstance(mid, str) and ObjectId.is_valid(mid):
+                    valid_member_ids.append(ObjectId(mid))
+                    # Also keep the string version just in case DB has string IDs
+                    valid_member_ids.append(mid)
+                else:
+                    # Not an ObjectId, but keep it if the DB uses string IDs for this type
+                    valid_member_ids.append(mid)
+            
             # Bulk fetch all members
-            members_list = list(self.members.find({"_id": {"$in": list(member_ids)}}))
+            members_list = list(self.members.find({"_id": {"$in": valid_member_ids}})) if valid_member_ids else []
             members_map = {str(m.get("_id")): m for m in members_list}
             
             # 3. Bulk fetch all metadata for these tickets (technician info)
@@ -460,11 +477,19 @@ class MongoDB:
         except pymongo.errors.OperationFailure as e:
             self.last_error = f"[DATABASE] Failed to get tickets (OperationFailure): {str(e)}\n{traceback.format_exc()}"
             logging.error(self.last_error)
+            # FALLBACK: If lookup fails, at least return the raw tickets so the UI isn't empty
+            if 'tickets' in locals() and tickets:
+                logging.warning("[DATABASE] Returning unenriched tickets as fallback")
+                return tickets
             return []
         except Exception as e:
             import traceback
             self.last_error = f"[DATABASE] Error getting tickets (Exception): {str(e)}\n{traceback.format_exc()}"
             logging.error(self.last_error)
+            # FALLBACK: Return raw tickets if enrichment threw an exception
+            if 'tickets' in locals() and tickets:
+                logging.warning("[DATABASE] Returning unenriched tickets as fallback after exception")
+                return tickets
             return []
     
     def get_tickets_count(self, status_filter=None, priority_filter=None, search_query=None, referred_only=False, exclude_ids=None):
