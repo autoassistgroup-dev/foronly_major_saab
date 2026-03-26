@@ -1,4 +1,4 @@
-# Eventlet for async SocketIO (Linux/macOS). Skip on Vercel serverless & Windows.
+# Eventlet for async SocketIO (Linux/macOS). Skip on Vercel serverless & Window
 import sys
 import os
 _is_serverless = os.environ.get('VERCEL') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
