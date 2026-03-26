@@ -1259,21 +1259,6 @@
                                     </div>
                                 </div>
                         </form>
-                        {% else %}
-                        <!-- Ticket is closed - show message instead of reply form -->
-                        <div class="mt-8 p-6 bg-gray-50 border border-gray-200 rounded-lg text-center">
-                            <div class="flex items-center justify-center mb-3">
-                                <i class="fas fa-lock text-gray-500 text-2xl mr-3"></i>
-                                <h3 class="text-lg font-semibold text-gray-700">Ticket Closed</h3>
-                            </div>
-                            <p class="text-gray-600">This ticket has been {{ ticket.status.lower() }} and is no
-                                longer
-                                accepting new replies.</p>
-                            {% if ticket.closed_by and ticket.closed_at %}
-                            <p class="text-sm text-gray-500 mt-2">Closed by {{ ticket.closed_by }} on {{
-                                ticket.closed_at|format_datetime }}</p>
-                            {% endif %}
-                        </div>
                         {% endif %}
 
                         <!-- File Attachments Section (Hidden) - this is the dropzone for drag and drop -->
@@ -1299,6 +1284,27 @@
                                 </div>
                             </div>
                         </div>
+                    </div> <!-- Ends .px-6 py-4 border-t -->
+                </div> <!-- Ends .conversation-container (repliesContainer) -->
+            </div> <!-- Ends bg-[#151928] rounded-xl shadow-lg border border-[#2d3248] mb-6 overflow-hidden flex flex-col h-auto -->
+            
+            {% if ticket.status and ticket.status.lower() in ['resolved', 'closed', 'declined', 'cancelled'] %}
+            <!-- Ticket is closed - show message instead of reply form -->
+            <div class="w-full mt-6 mb-8 block clear-both">
+                <div class="w-full p-8 bg-[#1a1f36] border border-[#2d3248] rounded-xl text-center shadow-lg transform transition-all hover:scale-[1.01]">
+                    <div class="flex flex-col items-center justify-center mb-5 w-full">
+                        <div class="w-16 h-16 mx-auto bg-gradient-to-br from-[#23283e] to-[#2d3248] rounded-full flex items-center justify-center mb-4 border border-[#373d57] shadow-inner">
+                            <i class="fas fa-lock text-gray-400 text-2xl"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold text-white tracking-wide text-center">Ticket Closed</h3>
                     </div>
+                    <p class="text-gray-400 text-sm max-w-lg mx-auto leading-relaxed mb-6 text-center">This ticket has been marked as <span class="px-2.5 py-1 rounded bg-gray-800 border border-gray-700 text-gray-300 font-semibold whitespace-nowrap">{{ ticket.status }}</span> and is no longer accepting new replies.</p>
+                    {% if ticket.closed_by and ticket.closed_at %}
+                    <div class="inline-flex items-center justify-center w-auto mx-auto gap-2.5 px-4 py-2 bg-[#23283e] rounded-full border border-[#373d57] shadow-sm">
+                        <i class="fas fa-user-circle text-gray-500 text-lg"></i>
+                        <span class="text-sm text-gray-400">Closed by <span class="text-white font-medium">{{ ticket.closed_by }}</span> on <span class="text-gray-300">{{ ticket.closed_at|format_datetime }}</span></span>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
+            {% endif %}

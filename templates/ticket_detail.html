@@ -7616,17 +7616,20 @@
                             </form>
                             {% else %}
                             <!-- Ticket is closed - show message instead of reply form -->
-                            <div class="mt-8 p-6 bg-gray-50 border border-gray-200 rounded-lg text-center">
-                                <div class="flex items-center justify-center mb-3">
-                                    <i class="fas fa-lock text-gray-500 text-2xl mr-3"></i>
-                                    <h3 class="text-lg font-semibold text-gray-700">Ticket Closed</h3>
+                            <div class="mt-6 p-8 bg-[#1a1a24] border border-[#2d2d3d] rounded-xl text-center shadow-lg w-full flex flex-col items-center justify-center relative overflow-hidden">
+                                <!-- Subtle glowing accent at top -->
+                                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-rose-500 to-orange-500 opacity-70"></div>
+                                
+                                <div class="flex items-center justify-center mb-4 bg-red-500/10 p-4 rounded-full border border-red-500/20">
+                                    <i class="fas fa-lock text-red-400 text-3xl"></i>
                                 </div>
-                                <p class="text-gray-600">This ticket has been {{ ticket.status.lower() }} and is no
-                                    longer
-                                    accepting new replies.</p>
+                                <h3 class="text-xl font-bold text-white mb-2">Ticket Closed</h3>
+                                <p class="text-gray-400 max-w-md mx-auto leading-relaxed">This ticket has been <span class="text-red-300 font-medium">{{ ticket.status.lower() }}</span> and is no longer accepting new replies.</p>
                                 {% if ticket.closed_by and ticket.closed_at %}
-                                <p class="text-sm text-gray-500 mt-2">Closed by {{ ticket.closed_by }} on {{
-                                    ticket.closed_at|format_datetime }}</p>
+                                <div class="mt-6 inline-flex items-center px-4 py-2 bg-[#2d2d3d] rounded-lg border border-gray-700">
+                                    <i class="fas fa-user-lock text-gray-500 mr-2"></i>
+                                    <span class="text-sm text-gray-400">Closed by <strong class="text-gray-300">{{ ticket.closed_by }}</strong> on {{ ticket.closed_at|format_datetime }}</span>
+                                </div>
                                 {% endif %}
                             </div>
                             {% endif %}
